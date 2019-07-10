@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[derive(Default)]
 pub struct KvStore {
     items: HashMap<String, String>,
 }
@@ -8,9 +9,7 @@ pub struct KvStore {
 // must be a better way.
 impl KvStore {
     pub fn new() -> KvStore {
-        KvStore {
-            items: HashMap::new(),
-        }
+        KvStore::default()
     }
 
     pub fn set(&mut self, key: String, value: String) {
