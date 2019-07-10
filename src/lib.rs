@@ -6,12 +6,14 @@ impl KvStore {
     }
 
     pub fn set(&mut self, _key: String, _value: String) {
+        panic!("unimplemented")
     }
 
     pub fn get(&self, _key: String) -> Option<String> {
-        Some("".to_owned())
+        panic!("unimplemented")
     }
 
     pub fn remove(&mut self, _key: String) {
+        panic!("unimplemented")
     }
 }
