@@ -1,4 +1,4 @@
-use clap::{App,Arg,SubCommand};
+use clap::{App,Arg,SubCommand,AppSettings};
 
 use kvs::KvStore;
 
@@ -7,6 +7,7 @@ fn main() {
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
+        .setting(AppSettings::SubcommandRequired)
         .subcommand(SubCommand::with_name("get")
                     .arg(Arg::with_name("key")
                          .required(true)
