@@ -20,17 +20,17 @@ fn try_main() -> Result<()> {
     let mut store = KvStore::open(".")?;
 
     match matches.subcommand() {
-        ("get", Some(_smatches)) => {
-            /*
-            if let Some(val) = store.get(smatches.value_of("key").unwrap().to_owned()) {
+        ("get", Some(smatches)) => match store.get(smatches.value_of("key").unwrap().to_owned()) {
+            Ok(Some(val)) => {
                 println!("{}", val);
-            } else {
-                eprintln!("unknown key");
-                // TODO: exit with error
+                Ok(())
             }
-            */
-            unimplemented!()
-        }
+            Ok(None) => {
+                println!("Key not found");
+                Ok(())
+            }
+            Err(err) => Err(err),
+        },
         ("set", Some(smatches)) => store.set(
             smatches.value_of("key").unwrap().to_owned(),
             smatches.value_of("value").unwrap().to_owned(),

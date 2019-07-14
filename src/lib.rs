@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::io::{self, prelude::*, BufReader, Seek, Write};
+use std::fs::OpenOptions;
+use std::io::{self, prelude::*, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 
 // TODO: encapsulate in struct storing what operation failed (set...)?
@@ -37,8 +37,6 @@ pub type Result<T> = std::result::Result<T, KvError>;
 
 pub struct KvStore {
     filename: PathBuf,
-    file: File,
-    map: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,67 +49,54 @@ enum Command {
 // must be a better way.
 impl KvStore {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
-        let pathbuf = path.as_ref().join("kv.db");
-        let file = OpenOptions::new()
-            .read(true)
-            .append(true)
-            .create(true)
-            .open(&pathbuf)
-            .map_err(|err| KvError::Io(pathbuf.clone(), err))?;
-
         Ok(KvStore {
-            filename: pathbuf,
-            file,
-            map: HashMap::new(),
+            filename: path.as_ref().join("kv.db"),
         })
     }
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        self.file
-            .seek(io::SeekFrom::End(0))
-            .map_err(|err| KvError::Io(self.filename.clone(), err))?;
-        let ser = serde_json::to_string(&Command::Set(key, value)).map_err(KvError::Serde)?;
-        self.file
-            .write_fmt(format_args!("{}\n", ser))
-            .map_err(|err| self.io_to_kv_err(err))
+        self.append_to_log(Command::Set(key, value))
     }
 
-    pub fn get(&self, _key: String) -> Result<Option<String>> {
-        unimplemented!();
+    pub fn get(&self, key: String) -> Result<Option<String>> {
+        let kvs = self.load_map()?;
+        Ok(kvs.get(&key).map(|val| val.to_string()))
     }
 
     pub fn remove(&mut self, key: String) -> Result<()> {
-        self.load_map()?;
-        match self.map.get(&key) {
-            Some(_) => {
-                let ser = serde_json::to_string(&Command::Rm(key)).map_err(KvError::Serde)?;
-                self.file
-                    .seek(io::SeekFrom::End(0))
-                    .map_err(|err| self.io_to_kv_err(err))?;
-
-                self.file
-                    .write_fmt(format_args!("{}\n", ser))
-                    .map_err(|err| self.io_to_kv_err(err))?;
-                Ok(())
-            }
+        let kvs = self.load_map()?;
+        match kvs.get(&key) {
+            Some(_) => self.append_to_log(Command::Rm(key)),
             None => Err(KvError::KeyNotFound(key)),
         }
+    }
+
+    fn append_to_log(&self, cmd: Command) -> Result<()> {
+        let ser = serde_json::to_string(&cmd).map_err(KvError::Serde)?;
+        let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&self.filename)
+            .map_err(|err| self.io_to_kv_err(err))?;
+
+        file.write_fmt(format_args!("{}\n", ser))
+            .map_err(|err| self.io_to_kv_err(err))
     }
 
     fn io_to_kv_err(&self, err: io::Error) -> KvError {
         KvError::Io(self.filename.clone(), err)
     }
 
-    fn load_map(&mut self) -> Result<()> {
-        if !self.map.is_empty() {
-            return Ok(());
-        }
+    fn load_map(&self) -> Result<(HashMap<String, String>)> {
+        let mut kvs = HashMap::new();
 
-        self.file
-            .seek(io::SeekFrom::Start(0))
-            .map_err(|err| self.io_to_kv_err(err))?;
+        let file = match OpenOptions::new().read(true).open(&self.filename) {
+            Ok(f) => f,
+            Err(ref err) if err.kind() == ErrorKind::NotFound => return Ok(kvs),
+            Err(err) => return Err(self.io_to_kv_err(err)),
+        };
+        let mut rd = BufReader::new(&file);
 
-        let mut rd = BufReader::new(&self.file);
         loop {
             let mut ser = String::new();
             match rd.read_line(&mut ser) {
@@ -121,15 +106,15 @@ impl KvStore {
             }
             match serde_json::from_str::<Command>(&ser) {
                 Ok(Command::Set(key, value)) => {
-                    self.map.insert(key, value);
+                    kvs.insert(key, value);
                 }
                 Ok(Command::Rm(key)) => {
-                    self.map.remove(&key);
+                    kvs.remove(&key);
                 }
                 Err(err) => return Err(KvError::Serde(err)),
             }
         }
 
-        Ok(())
+        Ok(kvs)
     }
 }
