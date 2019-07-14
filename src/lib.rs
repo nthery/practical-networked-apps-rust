@@ -38,6 +38,7 @@ pub type Result<T> = std::result::Result<T, KvError>;
 pub struct KvStore {
     filename: PathBuf,
     file: File,
+    map: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,6 +62,7 @@ impl KvStore {
         Ok(KvStore {
             filename: pathbuf,
             file,
+            map: HashMap::new(),
         })
     }
 
@@ -78,11 +80,37 @@ impl KvStore {
         unimplemented!();
     }
 
-    pub fn remove(&mut self, rmkey: String) -> Result<()> {
-        let mut kvs = HashMap::new();
+    pub fn remove(&mut self, key: String) -> Result<()> {
+        self.load_map()?;
+        match self.map.get(&key) {
+            Some(_) => {
+                let ser = serde_json::to_string(&Command::Rm(key)).map_err(KvError::Serde)?;
+                self.file
+                    .seek(io::SeekFrom::End(0))
+                    .map_err(|err| self.io_to_kv_err(err))?;
+
+                self.file
+                    .write_fmt(format_args!("{}\n", ser))
+                    .map_err(|err| self.io_to_kv_err(err))?;
+                Ok(())
+            }
+            None => Err(KvError::KeyNotFound(key)),
+        }
+    }
+
+    fn io_to_kv_err(&self, err: io::Error) -> KvError {
+        KvError::Io(self.filename.clone(), err)
+    }
+
+    fn load_map(&mut self) -> Result<()> {
+        if !self.map.is_empty() {
+            return Ok(());
+        }
+
         self.file
             .seek(io::SeekFrom::Start(0))
-            .map_err(|err| KvError::Io(self.filename.clone(), err))?;
+            .map_err(|err| self.io_to_kv_err(err))?;
+
         let mut rd = BufReader::new(&self.file);
         loop {
             let mut ser = String::new();
@@ -93,27 +121,15 @@ impl KvStore {
             }
             match serde_json::from_str::<Command>(&ser) {
                 Ok(Command::Set(key, value)) => {
-                    kvs.insert(key, value);
+                    self.map.insert(key, value);
                 }
                 Ok(Command::Rm(key)) => {
-                    kvs.remove(&key);
+                    self.map.remove(&key);
                 }
                 Err(err) => return Err(KvError::Serde(err)),
             }
         }
 
-        if kvs.get(&rmkey).is_some() {
-            let ser = serde_json::to_string(&Command::Rm(rmkey)).map_err(KvError::Serde)?;
-            self.file
-                .write_fmt(format_args!("{}\n", ser))
-                .map_err(|err| self.io_to_kv_err(err))?;
-            Ok(())
-        } else {
-            Err(KvError::KeyNotFound(rmkey))
-        }
-    }
-
-    fn io_to_kv_err(&self, err: io::Error) -> KvError {
-        KvError::Io(self.filename.clone(), err)
+        Ok(())
     }
 }
