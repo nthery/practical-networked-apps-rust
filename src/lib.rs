@@ -89,6 +89,7 @@ impl KvStore {
             .open(&self.filename)
             .map_err(|err| self.io_to_kv_err(err))?;
 
+        // TODO: What if the write fails halfway through?
         file.write_fmt(format_args!("{}\n", ser))
             .map_err(|err| self.io_to_kv_err(err))
     }
