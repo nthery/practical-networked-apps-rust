@@ -40,10 +40,17 @@ pub struct KvStore {
     map: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-enum Command {
-    Set(String, String),
-    Rm(String),
+#[derive(Serialize, Deserialize, Debug)]
+enum Tag {
+    Set,
+    Rm,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Header {
+    tag: Tag,
+    key: String,
+    value_size: usize,
 }
 
 // TODO: Most methods take String arguments because tests use str::to_owned().  There
@@ -58,7 +65,7 @@ impl KvStore {
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
         // TODO: optimize away clone() calls.
-        self.append_to_log(Command::Set(key.clone(), value.clone()))?;
+        self.append_to_log(Tag::Set, &key, Some(&value))?;
         self.map.insert(key, value);
         Ok(())
     }
@@ -72,7 +79,7 @@ impl KvStore {
             Some(_) => {
                 // Update the in-ram map if and only if on-disk log updated.
                 // TODO: optimize away clone() calls.
-                self.append_to_log(Command::Rm(key.clone())).and_then(|()| {
+                self.append_to_log(Tag::Rm, &key, None).and_then(|()| {
                     self.map.remove(&key);
                     Ok(())
                 })
@@ -81,8 +88,23 @@ impl KvStore {
         }
     }
 
-    fn append_to_log(&self, cmd: Command) -> Result<()> {
-        let ser = serde_json::to_string(&cmd).map_err(KvError::Serde)?;
+    fn append_to_log(&self, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<()> {
+        let ser_val_opt = match val_opt {
+            Some(val) => Some(serde_json::to_string(val).map_err(KvError::Serde)?),
+            None => None,
+        };
+
+        let hdr = Header {
+            tag,
+            key: key.to_string(),
+            value_size: match ser_val_opt {
+                Some(ref ser) => ser.len() + "\n".len(),
+                None => 0,
+            },
+        };
+
+        let ser_hdr = serde_json::to_string(&hdr).map_err(KvError::Serde)?;
+
         let mut file = OpenOptions::new()
             .append(true)
             .create(true)
@@ -90,8 +112,13 @@ impl KvStore {
             .map_err(|err| self.io_to_kv_err(err))?;
 
         // TODO: What if the write fails halfway through?
-        file.write_fmt(format_args!("{}\n", ser))
-            .map_err(|err| self.io_to_kv_err(err))
+        file.write_fmt(format_args!("{}\n", ser_hdr))
+            .map_err(|err| self.io_to_kv_err(err))?;
+        if ser_val_opt.is_some() {
+            file.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))
+                .map_err(|err| self.io_to_kv_err(err))?;
+        }
+        Ok(())
     }
 
     fn io_to_kv_err(&self, err: io::Error) -> KvError {
@@ -110,19 +137,28 @@ fn load_map_from(path: &Path) -> Result<(HashMap<String, String>)> {
     let mut rd = BufReader::new(&file);
 
     loop {
-        let mut ser = String::new();
-        match rd.read_line(&mut ser) {
+        let mut ser_hdr = String::new();
+        match rd.read_line(&mut ser_hdr) {
             Ok(0) => break,
             Err(err) => return Err(io_to_kv_err(path, err)),
             _ => (),
-        }
-        match serde_json::from_str::<Command>(&ser) {
-            Ok(Command::Set(key, value)) => {
-                kvs.insert(key, value);
-            }
-            Ok(Command::Rm(key)) => {
-                kvs.remove(&key);
-            }
+        };
+        match serde_json::from_str::<Header>(&ser_hdr) {
+            Ok(hdr) => match hdr.tag {
+                Tag::Set => {
+                    let mut ser_val = String::new();
+                    match rd.read_line(&mut ser_val) {
+                        Ok(0) => break,
+                        Err(err) => return Err(io_to_kv_err(path, err)),
+                        _ => (),
+                    };
+                    let val = serde_json::from_str::<String>(&ser_val).map_err(KvError::Serde)?;
+                    kvs.insert(hdr.key, val);
+                }
+                Tag::Rm => {
+                    kvs.remove(&hdr.key);
+                }
+            },
             Err(err) => return Err(KvError::Serde(err)),
         }
     }
