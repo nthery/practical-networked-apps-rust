@@ -47,9 +47,9 @@ enum Tag {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Header {
+struct Header<'a> {
     tag: Tag,
-    key: String,
+    key: &'a str,
     value_size: usize,
 }
 
@@ -64,7 +64,6 @@ impl KvStore {
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
-        // TODO: optimize away clone() calls.
         self.append_to_log(Tag::Set, &key, Some(&value))?;
         self.map.insert(key, value);
         Ok(())
@@ -78,7 +77,6 @@ impl KvStore {
         match self.map.get(&key) {
             Some(_) => {
                 // Update the in-ram map if and only if on-disk log updated.
-                // TODO: optimize away clone() calls.
                 self.append_to_log(Tag::Rm, &key, None).and_then(|()| {
                     self.map.remove(&key);
                     Ok(())
@@ -96,7 +94,7 @@ impl KvStore {
 
         let hdr = Header {
             tag,
-            key: key.to_string(),
+            key,
             value_size: match ser_val_opt {
                 Some(ref ser) => ser.len() + "\n".len(),
                 None => 0,
@@ -153,10 +151,10 @@ fn load_map_from(path: &Path) -> Result<(HashMap<String, String>)> {
                         _ => (),
                     };
                     let val = serde_json::from_str::<String>(&ser_val).map_err(KvError::Serde)?;
-                    kvs.insert(hdr.key, val);
+                    kvs.insert(hdr.key.to_string(), val);
                 }
                 Tag::Rm => {
-                    kvs.remove(&hdr.key);
+                    kvs.remove(hdr.key);
                 }
             },
             Err(err) => return Err(KvError::Serde(err)),
