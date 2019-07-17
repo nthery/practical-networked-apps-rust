@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::convert::From;
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
@@ -12,6 +13,12 @@ pub enum KvError {
     Io(PathBuf, io::Error),
     Serde(serde_json::Error),
     KeyNotFound(String),
+}
+
+impl From<serde_json::Error> for KvError {
+    fn from(err: serde_json::Error) -> KvError {
+        KvError::Serde(err)
+    }
 }
 
 impl fmt::Display for KvError {
@@ -114,6 +121,8 @@ impl KvStore {
         let mut ser_val = String::new();
         rd.read_line(&mut ser_val)
             .map_err(|err| self.io_to_kv_err(err))?;
+        // TODO: For some reason the conversion from serde o KvError does not kick in here hence
+        // the map_err() call.
         serde_json::from_str(&ser_val).map_err(KvError::Serde)
     }
 
@@ -212,7 +221,7 @@ fn append_to_open_log(
     val_opt: Option<&str>,
 ) -> Result<u64> {
     let ser_val_opt = match val_opt {
-        Some(val) => Some(serde_json::to_string(val).map_err(KvError::Serde)?),
+        Some(val) => Some(serde_json::to_string(val)?),
         None => None,
     };
 
@@ -225,7 +234,7 @@ fn append_to_open_log(
         },
     };
 
-    let ser_hdr = serde_json::to_string(&hdr).map_err(KvError::Serde)?;
+    let ser_hdr = serde_json::to_string(&hdr)?;
 
     // TODO: What if the write fails halfway through?
     wr.write_fmt(format_args!("{}\n", ser_hdr))
