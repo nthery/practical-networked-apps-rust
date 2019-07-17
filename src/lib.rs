@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::OpenOptions;
-use std::io::{self, prelude::*, BufReader, ErrorKind};
+use std::io::{self, prelude::*, BufReader, ErrorKind, SeekFrom};
 use std::path::{Path, PathBuf};
 
 // TODO: encapsulate in struct storing what operation failed (set...)?
@@ -35,9 +35,11 @@ impl std::error::Error for KvError {
 
 pub type Result<T> = std::result::Result<T, KvError>;
 
+type Index = HashMap<String, u64>;
+
 pub struct KvStore {
     filename: PathBuf,
-    map: HashMap<String, String>,
+    map: Index,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -64,20 +66,35 @@ impl KvStore {
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
-        self.append_to_log(Tag::Set, &key, Some(&value))?;
-        self.map.insert(key, value);
+        let off = self.append_to_log(Tag::Set, &key, Some(&value))?;
+        self.map.insert(key, off);
         Ok(())
     }
 
     pub fn get(&self, key: String) -> Result<Option<String>> {
-        Ok(self.map.get(&key).map(|val| val.to_string()))
+        Ok(match self.map.get(&key) {
+            Some(off) => {
+                let file = OpenOptions::new()
+                    .read(true)
+                    .open(&self.filename)
+                    .map_err(|err| self.io_to_kv_err(err))?;
+                let mut rd = BufReader::new(&file);
+                rd.seek(SeekFrom::Start(*off))
+                    .map_err(|err| self.io_to_kv_err(err))?;
+                let mut ser_val = String::new();
+                rd.read_line(&mut ser_val)
+                    .map_err(|err| self.io_to_kv_err(err))?;
+                Some(serde_json::from_str(&ser_val).map_err(KvError::Serde)?)
+            }
+            None => None,
+        })
     }
 
     pub fn remove(&mut self, key: String) -> Result<()> {
         match self.map.get(&key) {
             Some(_) => {
                 // Update the in-ram map if and only if on-disk log updated.
-                self.append_to_log(Tag::Rm, &key, None).and_then(|()| {
+                self.append_to_log(Tag::Rm, &key, None).and_then(|_| {
                     self.map.remove(&key);
                     Ok(())
                 })
@@ -86,7 +103,7 @@ impl KvStore {
         }
     }
 
-    fn append_to_log(&self, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<()> {
+    fn append_to_log(&self, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<u64> {
         let ser_val_opt = match val_opt {
             Some(val) => Some(serde_json::to_string(val).map_err(KvError::Serde)?),
             None => None,
@@ -112,11 +129,15 @@ impl KvStore {
         // TODO: What if the write fails halfway through?
         file.write_fmt(format_args!("{}\n", ser_hdr))
             .map_err(|err| self.io_to_kv_err(err))?;
+        let off = file
+            .seek(SeekFrom::Current(0))
+            .map_err(|err| self.io_to_kv_err(err))?;
         if ser_val_opt.is_some() {
             file.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))
                 .map_err(|err| self.io_to_kv_err(err))?;
         }
-        Ok(())
+
+        Ok(off)
     }
 
     fn io_to_kv_err(&self, err: io::Error) -> KvError {
@@ -124,7 +145,7 @@ impl KvStore {
     }
 }
 
-fn load_map_from(path: &Path) -> Result<(HashMap<String, String>)> {
+fn load_map_from(path: &Path) -> Result<Index> {
     let mut kvs = HashMap::new();
 
     let file = match OpenOptions::new().read(true).open(&path) {
@@ -144,14 +165,12 @@ fn load_map_from(path: &Path) -> Result<(HashMap<String, String>)> {
         match serde_json::from_str::<Header>(&ser_hdr) {
             Ok(hdr) => match hdr.tag {
                 Tag::Set => {
-                    let mut ser_val = String::new();
-                    match rd.read_line(&mut ser_val) {
-                        Ok(0) => break,
-                        Err(err) => return Err(io_to_kv_err(path, err)),
-                        _ => (),
-                    };
-                    let val = serde_json::from_str::<String>(&ser_val).map_err(KvError::Serde)?;
-                    kvs.insert(hdr.key.to_string(), val);
+                    let off = rd
+                        .seek(SeekFrom::Current(0))
+                        .map_err(|err| io_to_kv_err(path, err))?;
+                    rd.seek(SeekFrom::Current(hdr.value_size as i64))
+                        .map_err(|err| io_to_kv_err(path, err))?;
+                    kvs.insert(hdr.key.to_string(), off);
                 }
                 Tag::Rm => {
                     kvs.remove(hdr.key);
