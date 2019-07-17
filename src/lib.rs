@@ -73,19 +73,7 @@ impl KvStore {
 
     pub fn get(&self, key: String) -> Result<Option<String>> {
         Ok(match self.map.get(&key) {
-            Some(off) => {
-                let file = OpenOptions::new()
-                    .read(true)
-                    .open(&self.filename)
-                    .map_err(|err| self.io_to_kv_err(err))?;
-                let mut rd = BufReader::new(&file);
-                rd.seek(SeekFrom::Start(*off))
-                    .map_err(|err| self.io_to_kv_err(err))?;
-                let mut ser_val = String::new();
-                rd.read_line(&mut ser_val)
-                    .map_err(|err| self.io_to_kv_err(err))?;
-                Some(serde_json::from_str(&ser_val).map_err(KvError::Serde)?)
-            }
+            Some(off) => Some(self.read_value_from_log(*off)?),
             None => None,
         })
     }
@@ -101,6 +89,20 @@ impl KvStore {
             }
             None => Err(KvError::KeyNotFound(key)),
         }
+    }
+
+    fn read_value_from_log(&self, off: u64) -> Result<String> {
+        let file = OpenOptions::new()
+            .read(true)
+            .open(&self.filename)
+            .map_err(|err| self.io_to_kv_err(err))?;
+        let mut rd = BufReader::new(&file);
+        rd.seek(SeekFrom::Start(off))
+            .map_err(|err| self.io_to_kv_err(err))?;
+        let mut ser_val = String::new();
+        rd.read_line(&mut ser_val)
+            .map_err(|err| self.io_to_kv_err(err))?;
+        serde_json::from_str(&ser_val).map_err(KvError::Serde)
     }
 
     fn io_to_kv_err(&self, err: io::Error) -> KvError {
