@@ -119,6 +119,10 @@ impl KvStore {
     fn read_value_from_log(&self, off: u64) -> Result<String> {
         let file = OpenOptions::new().read(true).open(&self.filename)?;
         let mut rd = BufReader::new(&file);
+        self.read_value_from_open_log(&mut rd, off)
+    }
+
+    fn read_value_from_open_log(&self, rd: &mut BufReader<&File>, off: u64) -> Result<String> {
         rd.seek(SeekFrom::Start(off))?;
         let mut ser_val = String::new();
         rd.read_line(&mut ser_val)?;
@@ -139,10 +143,12 @@ impl KvStore {
         let tmp_file = NamedTempFile::new_in(".")?;
         let mut tmp_wr = BufWriter::new(tmp_file.as_file());
 
+        let old_file = File::open(&self.filename)?;
+        let mut old_rd = BufReader::new(&old_file);
+
         let mut new_map = Index::new();
         for (key, off) in &self.map {
-            // TODO: read from open log
-            let val = self.read_value_from_log(*off)?;
+            let val = self.read_value_from_open_log(&mut old_rd, *off)?;
             let new_off = append_to_open_log(&mut tmp_wr, Tag::Set, &key, Some(&val))?;
             // TODO: move keys from old map rather than clone them.
             new_map.insert(key.to_string(), new_off);
