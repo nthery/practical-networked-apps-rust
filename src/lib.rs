@@ -66,7 +66,7 @@ impl KvStore {
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
-        let off = self.append_to_log(Tag::Set, &key, Some(&value))?;
+        let off = append_to_log(&self.filename, Tag::Set, &key, Some(&value))?;
         self.map.insert(key, off);
         Ok(())
     }
@@ -94,50 +94,13 @@ impl KvStore {
         match self.map.get(&key) {
             Some(_) => {
                 // Update the in-ram map if and only if on-disk log updated.
-                self.append_to_log(Tag::Rm, &key, None).and_then(|_| {
+                append_to_log(&self.filename, Tag::Rm, &key, None).and_then(|_| {
                     self.map.remove(&key);
                     Ok(())
                 })
             }
             None => Err(KvError::KeyNotFound(key)),
         }
-    }
-
-    fn append_to_log(&self, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<u64> {
-        let ser_val_opt = match val_opt {
-            Some(val) => Some(serde_json::to_string(val).map_err(KvError::Serde)?),
-            None => None,
-        };
-
-        let hdr = Header {
-            tag,
-            key,
-            value_size: match ser_val_opt {
-                Some(ref ser) => ser.len() + "\n".len(),
-                None => 0,
-            },
-        };
-
-        let ser_hdr = serde_json::to_string(&hdr).map_err(KvError::Serde)?;
-
-        let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&self.filename)
-            .map_err(|err| self.io_to_kv_err(err))?;
-
-        // TODO: What if the write fails halfway through?
-        file.write_fmt(format_args!("{}\n", ser_hdr))
-            .map_err(|err| self.io_to_kv_err(err))?;
-        let off = file
-            .seek(SeekFrom::Current(0))
-            .map_err(|err| self.io_to_kv_err(err))?;
-        if ser_val_opt.is_some() {
-            file.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))
-                .map_err(|err| self.io_to_kv_err(err))?;
-        }
-
-        Ok(off)
     }
 
     fn io_to_kv_err(&self, err: io::Error) -> KvError {
@@ -181,6 +144,43 @@ fn load_map_from(path: &Path) -> Result<Index> {
     }
 
     Ok(kvs)
+}
+
+fn append_to_log(path: &Path, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<u64> {
+    let ser_val_opt = match val_opt {
+        Some(val) => Some(serde_json::to_string(val).map_err(KvError::Serde)?),
+        None => None,
+    };
+
+    let hdr = Header {
+        tag,
+        key,
+        value_size: match ser_val_opt {
+            Some(ref ser) => ser.len() + "\n".len(),
+            None => 0,
+        },
+    };
+
+    let ser_hdr = serde_json::to_string(&hdr).map_err(KvError::Serde)?;
+
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .map_err(|err| io_to_kv_err(path, err))?;
+
+    // TODO: What if the write fails halfway through?
+    file.write_fmt(format_args!("{}\n", ser_hdr))
+        .map_err(|err| io_to_kv_err(path, err))?;
+    let off = file
+        .seek(SeekFrom::Current(0))
+        .map_err(|err| io_to_kv_err(path, err))?;
+    if ser_val_opt.is_some() {
+        file.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))
+            .map_err(|err| io_to_kv_err(path, err))?;
+    }
+
+    Ok(off)
 }
 
 fn io_to_kv_err(path: &Path, err: io::Error) -> KvError {
