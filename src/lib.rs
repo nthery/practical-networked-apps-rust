@@ -10,7 +10,7 @@ use tempfile::NamedTempFile;
 // TODO: encapsulate in struct storing what operation failed (set...)?
 #[derive(Debug)]
 pub enum KvError {
-    Io(PathBuf, io::Error),
+    Io(io::Error),
     Serde(serde_json::Error),
     KeyNotFound(String),
 }
@@ -21,10 +21,16 @@ impl From<serde_json::Error> for KvError {
     }
 }
 
+impl From<io::Error> for KvError {
+    fn from(err: io::Error) -> KvError {
+        KvError::Io(err)
+    }
+}
+
 impl fmt::Display for KvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            KvError::Io(ref pathbuf, _) => write!(f, "I/O error on {}", pathbuf.display()),
+            KvError::Io(_) => write!(f, "I/O error"),
             KvError::Serde(_) => write!(f, "Serialization error"),
             KvError::KeyNotFound(ref key) => write!(f, "Key not found: {}", key),
         }
@@ -34,7 +40,7 @@ impl fmt::Display for KvError {
 impl std::error::Error for KvError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match *self {
-            KvError::Io(_, ref err) => Some(err),
+            KvError::Io(ref err) => Some(err),
             KvError::Serde(ref err) => Some(err),
             KvError::KeyNotFound(_) => None,
         }
@@ -111,16 +117,11 @@ impl KvStore {
     }
 
     fn read_value_from_log(&self, off: u64) -> Result<String> {
-        let file = OpenOptions::new()
-            .read(true)
-            .open(&self.filename)
-            .map_err(|err| self.io_to_kv_err(err))?;
+        let file = OpenOptions::new().read(true).open(&self.filename)?;
         let mut rd = BufReader::new(&file);
-        rd.seek(SeekFrom::Start(off))
-            .map_err(|err| self.io_to_kv_err(err))?;
+        rd.seek(SeekFrom::Start(off))?;
         let mut ser_val = String::new();
-        rd.read_line(&mut ser_val)
-            .map_err(|err| self.io_to_kv_err(err))?;
+        rd.read_line(&mut ser_val)?;
         // TODO: For some reason the conversion from serde o KvError does not kick in here hence
         // the map_err() call.
         serde_json::from_str(&ser_val).map_err(KvError::Serde)
@@ -135,28 +136,23 @@ impl KvStore {
     }
 
     fn compact_log(&mut self) -> Result<()> {
-        let tmp_file = NamedTempFile::new_in(".").map_err(|err| self.io_to_kv_err(err))?;
+        let tmp_file = NamedTempFile::new_in(".")?;
         let mut tmp_wr = BufWriter::new(tmp_file.as_file());
 
         let mut new_map = Index::new();
         for (key, off) in &self.map {
             // TODO: read from open log
             let val = self.read_value_from_log(*off)?;
-            let new_off =
-                append_to_open_log(&mut tmp_wr, tmp_file.path(), Tag::Set, &key, Some(&val))?;
+            let new_off = append_to_open_log(&mut tmp_wr, Tag::Set, &key, Some(&val))?;
             // TODO: move keys from old map rather than clone them.
             new_map.insert(key.to_string(), new_off);
         }
 
-        fs::rename(tmp_file.path(), &self.filename).map_err(|err| self.io_to_kv_err(err))?;
+        fs::rename(tmp_file.path(), &self.filename)?;
         self.map = new_map;
         self.dead_entries = 0;
 
         Ok(())
-    }
-
-    fn io_to_kv_err(&self, err: io::Error) -> KvError {
-        KvError::Io(self.filename.clone(), err)
     }
 }
 
@@ -167,7 +163,7 @@ fn load_map_from(path: &Path) -> Result<(Index, i32)> {
     let file = match OpenOptions::new().read(true).open(&path) {
         Ok(f) => f,
         Err(ref err) if err.kind() == ErrorKind::NotFound => return Ok((kvs, dead_entries)),
-        Err(err) => return Err(io_to_kv_err(path, err)),
+        Err(err) => return Err(KvError::Io(err)),
     };
     let mut rd = BufReader::new(&file);
 
@@ -175,17 +171,14 @@ fn load_map_from(path: &Path) -> Result<(Index, i32)> {
         let mut ser_hdr = String::new();
         match rd.read_line(&mut ser_hdr) {
             Ok(0) => break,
-            Err(err) => return Err(io_to_kv_err(path, err)),
+            Err(err) => return Err(KvError::Io(err)),
             _ => (),
         };
         match serde_json::from_str::<Header>(&ser_hdr) {
             Ok(hdr) => match hdr.tag {
                 Tag::Set => {
-                    let off = rd
-                        .seek(SeekFrom::Current(0))
-                        .map_err(|err| io_to_kv_err(path, err))?;
-                    rd.seek(SeekFrom::Current(hdr.value_size as i64))
-                        .map_err(|err| io_to_kv_err(path, err))?;
+                    let off = rd.seek(SeekFrom::Current(0))?;
+                    rd.seek(SeekFrom::Current(hdr.value_size as i64))?;
                     if kvs.insert(hdr.key.to_string(), off).is_some() {
                         dead_entries += 1;
                     }
@@ -204,18 +197,13 @@ fn load_map_from(path: &Path) -> Result<(Index, i32)> {
 }
 
 fn append_to_log(path: &Path, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<u64> {
-    let file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(path)
-        .map_err(|err| io_to_kv_err(path, err))?;
+    let file = OpenOptions::new().append(true).create(true).open(path)?;
     let mut wr = BufWriter::new(&file);
-    append_to_open_log(&mut wr, path, tag, key, val_opt)
+    append_to_open_log(&mut wr, tag, key, val_opt)
 }
 
 fn append_to_open_log(
     wr: &mut BufWriter<&File>,
-    path: &Path,
     tag: Tag,
     key: &str,
     val_opt: Option<&str>,
@@ -237,19 +225,11 @@ fn append_to_open_log(
     let ser_hdr = serde_json::to_string(&hdr)?;
 
     // TODO: What if the write fails halfway through?
-    wr.write_fmt(format_args!("{}\n", ser_hdr))
-        .map_err(|err| io_to_kv_err(path, err))?;
-    let off = wr
-        .seek(SeekFrom::Current(0))
-        .map_err(|err| io_to_kv_err(path, err))?;
+    wr.write_fmt(format_args!("{}\n", ser_hdr))?;
+    let off = wr.seek(SeekFrom::Current(0))?;
     if ser_val_opt.is_some() {
-        wr.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))
-            .map_err(|err| io_to_kv_err(path, err))?;
+        wr.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))?;
     }
 
     Ok(off)
-}
-
-fn io_to_kv_err(path: &Path, err: io::Error) -> KvError {
-    KvError::Io(path.to_path_buf(), err)
 }
