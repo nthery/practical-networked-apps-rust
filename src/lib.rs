@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::OpenOptions;
-use std::io::{self, prelude::*, BufReader, ErrorKind, SeekFrom};
+use std::fs::{File, OpenOptions};
+use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
 use std::path::{Path, PathBuf};
 
 // TODO: encapsulate in struct storing what operation failed (set...)?
@@ -147,6 +147,22 @@ fn load_map_from(path: &Path) -> Result<Index> {
 }
 
 fn append_to_log(path: &Path, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<u64> {
+    let file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .map_err(|err| io_to_kv_err(path, err))?;
+    let mut wr = BufWriter::new(file);
+    append_to_open_log(&mut wr, path, tag, key, val_opt)
+}
+
+fn append_to_open_log(
+    wr: &mut BufWriter<File>,
+    path: &Path,
+    tag: Tag,
+    key: &str,
+    val_opt: Option<&str>,
+) -> Result<u64> {
     let ser_val_opt = match val_opt {
         Some(val) => Some(serde_json::to_string(val).map_err(KvError::Serde)?),
         None => None,
@@ -163,20 +179,14 @@ fn append_to_log(path: &Path, tag: Tag, key: &str, val_opt: Option<&str>) -> Res
 
     let ser_hdr = serde_json::to_string(&hdr).map_err(KvError::Serde)?;
 
-    let mut file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(path)
-        .map_err(|err| io_to_kv_err(path, err))?;
-
     // TODO: What if the write fails halfway through?
-    file.write_fmt(format_args!("{}\n", ser_hdr))
+    wr.write_fmt(format_args!("{}\n", ser_hdr))
         .map_err(|err| io_to_kv_err(path, err))?;
-    let off = file
+    let off = wr
         .seek(SeekFrom::Current(0))
         .map_err(|err| io_to_kv_err(path, err))?;
     if ser_val_opt.is_some() {
-        file.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))
+        wr.write_fmt(format_args!("{}\n", ser_val_opt.unwrap()))
             .map_err(|err| io_to_kv_err(path, err))?;
     }
 
