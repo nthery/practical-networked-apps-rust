@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 // TODO: encapsulate in struct storing what operation failed (set...)?
 #[derive(Debug)]
@@ -40,6 +41,7 @@ type Index = HashMap<String, u64>;
 pub struct KvStore {
     filename: PathBuf,
     map: Index,
+    dead_entries: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -55,19 +57,27 @@ struct Header<'a> {
     value_size: usize,
 }
 
+const MAX_DEAD_ENTRIES: i32 = 16;
+
 // TODO: Most methods take String arguments because tests use str::to_owned().  There
 // must be a better way.
 impl KvStore {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
         let filename = path.as_ref().join("kv.db");
-        let map = load_map_from(&filename)?;
-        Ok(KvStore { filename, map })
+        let (map, dead_entries) = load_map_from(&filename)?;
+        Ok(KvStore {
+            filename,
+            map,
+            dead_entries,
+        })
     }
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
         let off = append_to_log(&self.filename, Tag::Set, &key, Some(&value))?;
-        self.map.insert(key, off);
+        if self.map.insert(key, off).is_some() {
+            self.add_dead_entry()?;
+        }
         Ok(())
     }
 
@@ -83,7 +93,9 @@ impl KvStore {
             Some(_) => {
                 // Update the in-ram map if and only if on-disk log updated.
                 append_to_log(&self.filename, Tag::Rm, &key, None).and_then(|_| {
-                    self.map.remove(&key);
+                    if self.map.remove(&key).is_some() {
+                        self.add_dead_entry()?;
+                    }
                     Ok(())
                 })
             }
@@ -105,17 +117,47 @@ impl KvStore {
         serde_json::from_str(&ser_val).map_err(KvError::Serde)
     }
 
+    fn add_dead_entry(&mut self) -> Result<()> {
+        self.dead_entries += 1;
+        if self.dead_entries > MAX_DEAD_ENTRIES {
+            self.compact_log()?;
+        }
+        Ok(())
+    }
+
+    fn compact_log(&mut self) -> Result<()> {
+        let tmp_file = NamedTempFile::new_in(".").map_err(|err| self.io_to_kv_err(err))?;
+        let mut tmp_wr = BufWriter::new(tmp_file.as_file());
+
+        let mut new_map = Index::new();
+        for (key, off) in &self.map {
+            // TODO: read from open log
+            let val = self.read_value_from_log(*off)?;
+            let new_off =
+                append_to_open_log(&mut tmp_wr, tmp_file.path(), Tag::Set, &key, Some(&val))?;
+            // TODO: move keys from old map rather than clone them.
+            new_map.insert(key.to_string(), new_off);
+        }
+
+        fs::rename(tmp_file.path(), &self.filename).map_err(|err| self.io_to_kv_err(err))?;
+        self.map = new_map;
+        self.dead_entries = 0;
+
+        Ok(())
+    }
+
     fn io_to_kv_err(&self, err: io::Error) -> KvError {
         KvError::Io(self.filename.clone(), err)
     }
 }
 
-fn load_map_from(path: &Path) -> Result<Index> {
+fn load_map_from(path: &Path) -> Result<(Index, i32)> {
     let mut kvs = HashMap::new();
+    let mut dead_entries = 0;
 
     let file = match OpenOptions::new().read(true).open(&path) {
         Ok(f) => f,
-        Err(ref err) if err.kind() == ErrorKind::NotFound => return Ok(kvs),
+        Err(ref err) if err.kind() == ErrorKind::NotFound => return Ok((kvs, dead_entries)),
         Err(err) => return Err(io_to_kv_err(path, err)),
     };
     let mut rd = BufReader::new(&file);
@@ -135,17 +177,21 @@ fn load_map_from(path: &Path) -> Result<Index> {
                         .map_err(|err| io_to_kv_err(path, err))?;
                     rd.seek(SeekFrom::Current(hdr.value_size as i64))
                         .map_err(|err| io_to_kv_err(path, err))?;
-                    kvs.insert(hdr.key.to_string(), off);
+                    if kvs.insert(hdr.key.to_string(), off).is_some() {
+                        dead_entries += 1;
+                    }
                 }
                 Tag::Rm => {
-                    kvs.remove(hdr.key);
+                    if kvs.remove(hdr.key).is_some() {
+                        dead_entries += 1;
+                    }
                 }
             },
             Err(err) => return Err(KvError::Serde(err)),
         }
     }
 
-    Ok(kvs)
+    Ok((kvs, dead_entries))
 }
 
 fn append_to_log(path: &Path, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<u64> {
@@ -154,12 +200,12 @@ fn append_to_log(path: &Path, tag: Tag, key: &str, val_opt: Option<&str>) -> Res
         .create(true)
         .open(path)
         .map_err(|err| io_to_kv_err(path, err))?;
-    let mut wr = BufWriter::new(file);
+    let mut wr = BufWriter::new(&file);
     append_to_open_log(&mut wr, path, tag, key, val_opt)
 }
 
 fn append_to_open_log(
-    wr: &mut BufWriter<File>,
+    wr: &mut BufWriter<&File>,
     path: &Path,
     tag: Tag,
     key: &str,
