@@ -1,3 +1,5 @@
+// TODO: break down this file
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::From;
@@ -6,6 +8,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
+
+pub struct KvsEngine;
 
 // TODO: encapsulate in struct storing what operation failed (set...)?
 #[derive(Debug)]
