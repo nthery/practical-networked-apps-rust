@@ -6,6 +6,7 @@ use std::convert::From;
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
+use std::net;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
@@ -17,6 +18,7 @@ pub enum KvError {
     Io(io::Error),
     Serde(serde_json::Error),
     KeyNotFound(String),
+    Other(Box<dyn std::error::Error>),
 }
 
 impl From<serde_json::Error> for KvError {
@@ -31,12 +33,19 @@ impl From<io::Error> for KvError {
     }
 }
 
+impl From<net::AddrParseError> for KvError {
+    fn from(err: net::AddrParseError) -> KvError {
+        KvError::Other(Box::new(err))
+    }
+}
+
 impl fmt::Display for KvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             KvError::Io(_) => write!(f, "I/O error"),
             KvError::Serde(_) => write!(f, "Serialization error"),
             KvError::KeyNotFound(ref key) => write!(f, "Key not found: {}", key),
+            KvError::Other(ref err) => write!(f, "Other error: {}", err),
         }
     }
 }
@@ -47,6 +56,7 @@ impl std::error::Error for KvError {
             KvError::Io(ref err) => Some(err),
             KvError::Serde(ref err) => Some(err),
             KvError::KeyNotFound(_) => None,
+            KvError::Other(ref err) => err.source(),
         }
     }
 }
