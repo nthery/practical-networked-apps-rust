@@ -70,7 +70,7 @@ struct Header<'a> {
     value_size: usize,
 }
 
-const MAX_DEAD_ENTRIES: i32 = 16;
+const MAX_DEAD_ENTRIES: i32 = 64;
 
 // TODO: Most methods take String arguments because tests use str::to_owned().  There
 // must be a better way.
