@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use kvs::Result;
+use log::{info};
 use std::error::Error;
 use std::net::SocketAddr;
 
@@ -24,15 +25,27 @@ fn try_main() -> Result<()> {
         )
         .get_matches();
 
-    let _addr: SocketAddr = matches
+    let addr: SocketAddr = matches
         .value_of("addr_port")
         .unwrap_or("127.0.0.1:4000")
         .parse()?;
+
+    let engine = matches.value_of("engine").unwrap_or("kvs");
+
+    info!("version: {}", env!("CARGO_PKG_VERSION"));
+    info!("engine: {}", engine);
+    info!("address: {}", addr);
 
     unimplemented!()
 }
 
 fn main() {
+    // TODO: verbose level hardcoded
+    stderrlog::new()
+        .module(module_path!())
+        .verbosity(10)
+        .init()
+        .unwrap();
     match try_main() {
         Err(err) => {
             eprintln!("{}", err);
