@@ -1,7 +1,9 @@
 use clap::{App, AppSettings, Arg, SubCommand};
 use kvs::{KvError, Result};
 use std::error::Error;
+use std::io::prelude::*;
 use std::net::SocketAddr;
+use std::net::TcpStream;
 
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-client")
@@ -25,10 +27,12 @@ fn try_main() -> Result<()> {
         .subcommand(SubCommand::with_name("rm").arg(Arg::with_name("key").required(true).index(1)))
         .get_matches();
 
-    let _addr: SocketAddr = matches
+    let addr: SocketAddr = matches
         .value_of("addr_port")
         .unwrap_or("127.0.0.1:4000")
         .parse()?;
+
+    let mut s = TcpStream::connect(addr)?;
 
     match matches.subcommand() {
         ("get", Some(_smatches)) => unimplemented!(),

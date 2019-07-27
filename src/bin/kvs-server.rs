@@ -1,8 +1,10 @@
 use clap::{App, Arg};
 use kvs::Result;
-use log::{info};
+use log::{debug, info};
 use std::error::Error;
+use std::io::prelude::*;
 use std::net::SocketAddr;
+use std::net::{TcpListener, TcpStream};
 
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-server")
@@ -36,7 +38,12 @@ fn try_main() -> Result<()> {
     info!("engine: {}", engine);
     info!("address: {}", addr);
 
-    unimplemented!()
+    let l = TcpListener::bind(addr)?;
+    for s in l.incoming() {
+        debug!("got request");
+    }
+
+    Ok(())
 }
 
 fn main() {
