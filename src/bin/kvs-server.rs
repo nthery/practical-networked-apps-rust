@@ -67,11 +67,20 @@ fn handle_request(store: &mut KvStore, maybe_stream: io::Result<TcpStream>) -> k
     match cmd {
         wire::Request::Get(key) => { 
             let reply = wire::Reply(store.get(key).map_err(|err| err.to_string()));
-            debug!("replying {:?}", reply);
-            let ser = serde_json::to_string(&reply)?;
-            writeln!(stream, "{}", ser)?;
+            send_reply(&mut stream, reply)?;
+        },
+        wire::Request::Set(key, val) => {
+            let reply = wire::Reply(store.set(key, val).map(|_| None).map_err(|err| err.to_string()));
+            send_reply(&mut stream, reply)?;
         },
     };
+    Ok(())
+}
+
+fn send_reply(wr: &mut impl Write, r: wire::Reply) -> kvs::Result<()> {
+    debug!("replying {:?}", r);
+    let ser = serde_json::to_string(&r)?;
+    writeln!(wr, "{}", ser)?;
     Ok(())
 }
 

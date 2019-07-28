@@ -18,7 +18,8 @@ pub mod wire {
     // TODO: Use &str instead of String
     #[derive(Debug, Serialize, Deserialize)]
     pub enum Request {
-        Get(String)
+        Get(String),
+        Set(String, String),
     }
 
     #[derive(Debug, Serialize, Deserialize)]

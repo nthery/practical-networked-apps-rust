@@ -7,13 +7,20 @@ use std::net::TcpStream;
 use kvs::wire;
 use log::debug;
 
-// TODO: make stream impl Write
 fn do_get(stream: &mut TcpStream, key: &str) -> Result<Option<String>> {
     let req = serde_json::to_string(&wire::Request::Get(key.to_string()))?;
     writeln!(stream, "{}", req)?;
     let reply = serde_json::from_reader::<_, wire::Reply>(stream)?;
     debug!("received {:?}", reply);
     reply.0.map_err(KvError::Server)
+}
+
+fn do_set(stream: &mut TcpStream, key: &str, val: &str) -> Result<()> {
+    let req = serde_json::to_string(&wire::Request::Set(key.to_string(), val.to_string()))?;
+    writeln!(stream, "{}", req)?;
+    let reply = serde_json::from_reader::<_, wire::Reply>(stream)?;
+    debug!("received {:?}", reply);
+    reply.0.map(|_| ()).map_err(KvError::Server)
 }
 
 fn try_main() -> Result<()> {
@@ -57,7 +64,9 @@ fn try_main() -> Result<()> {
             }
             Err(err) => Err(err),
             },
-        ("set", Some(_smatches)) => unimplemented!(),
+        ("set", Some(smatches)) => do_set(&mut stream,
+            smatches.value_of("key").unwrap(),
+            smatches.value_of("value").unwrap()),
         ("rm", Some(_smatches)) => unimplemented!(),
         _ => panic!("clap should have detected missing subcommand"),
     }
@@ -70,6 +79,7 @@ fn main() {
         .verbosity(10)
         .init()
         .unwrap();
+
     match try_main() {
         Err(KvError::KeyNotFound(_)) => {
             // The spec states that these errors go to stdout.
