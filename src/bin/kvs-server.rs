@@ -1,10 +1,13 @@
 use clap::{App, Arg};
 use kvs::Result;
-use log::{debug, info};
+use log::{error, debug, info};
 use std::error::Error;
-use std::io::prelude::*;
 use std::net::SocketAddr;
 use std::net::{TcpListener, TcpStream};
+use serde_json;
+use kvs::{self, wire, KvStore};
+use std::io::prelude::*;
+use std::io::{self, BufReader};
 
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-server")
@@ -38,11 +41,37 @@ fn try_main() -> Result<()> {
     info!("engine: {}", engine);
     info!("address: {}", addr);
 
+    let mut store = KvStore::open(".")?;
+
     let l = TcpListener::bind(addr)?;
-    for s in l.incoming() {
-        debug!("got request");
+    for sr in l.incoming() {
+        match handle_request(&mut store, sr) {
+            Ok(_) => debug!("handled request successfully"),
+            Err(err) => {
+                // Errors that can not be forwarded back to clients are logged instead.
+                error!("error while handling request: {}", err)
+            },
+        }
     }
 
+    Ok(())
+}
+
+fn handle_request(store: &mut KvStore, maybe_stream: io::Result<TcpStream>) -> kvs::Result<()> {
+    let mut stream = maybe_stream?;
+    let mut rd = BufReader::new(&stream);
+    let mut line = String::new();
+    rd.read_line(&mut line)?;
+    let cmd: wire::Request = serde_json::from_str(&line)?;
+    debug!("handling request {:?}", cmd);
+    match cmd {
+        wire::Request::Get(key) => { 
+            let reply = wire::Reply(store.get(key).map_err(|err| err.to_string()));
+            debug!("replying {:?}", reply);
+            let ser = serde_json::to_string(&reply)?;
+            writeln!(stream, "{}", ser)?;
+        },
+    };
     Ok(())
 }
 

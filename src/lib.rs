@@ -12,12 +12,26 @@ use tempfile::NamedTempFile;
 
 pub struct KvsEngine;
 
+pub mod wire {
+    use serde::{Serialize, Deserialize};
+
+    // TODO: Use &str instead of String
+    #[derive(Debug, Serialize, Deserialize)]
+    pub enum Request {
+        Get(String)
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct Reply ( pub Result<Option<String>, String> );
+}
+
 // TODO: encapsulate in struct storing what operation failed (set...)?
 #[derive(Debug)]
 pub enum KvError {
     Io(io::Error),
     Serde(serde_json::Error),
     KeyNotFound(String),
+    Server(String),
     Other(Box<dyn std::error::Error>),
 }
 
@@ -45,6 +59,7 @@ impl fmt::Display for KvError {
             KvError::Io(_) => write!(f, "I/O error"),
             KvError::Serde(_) => write!(f, "Serialization error"),
             KvError::KeyNotFound(ref key) => write!(f, "Key not found: {}", key),
+            KvError::Server(ref msg) => write!(f, "Server error: {}", msg),
             KvError::Other(ref err) => write!(f, "Other error: {}", err),
         }
     }
@@ -56,6 +71,7 @@ impl std::error::Error for KvError {
             KvError::Io(ref err) => Some(err),
             KvError::Serde(ref err) => Some(err),
             KvError::KeyNotFound(_) => None,
+            KvError::Server(_) => None,
             KvError::Other(ref err) => err.source(),
         }
     }

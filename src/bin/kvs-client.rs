@@ -4,6 +4,17 @@ use std::error::Error;
 use std::io::prelude::*;
 use std::net::SocketAddr;
 use std::net::TcpStream;
+use kvs::wire;
+use log::debug;
+
+// TODO: make stream impl Write
+fn do_get(stream: &mut TcpStream, key: &str) -> Result<Option<String>> {
+    let req = serde_json::to_string(&wire::Request::Get(key.to_string()))?;
+    writeln!(stream, "{}", req)?;
+    let reply = serde_json::from_reader::<_, wire::Reply>(stream)?;
+    debug!("received {:?}", reply);
+    reply.0.map_err(KvError::Server)
+}
 
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-client")
@@ -32,10 +43,20 @@ fn try_main() -> Result<()> {
         .unwrap_or("127.0.0.1:4000")
         .parse()?;
 
-    let mut s = TcpStream::connect(addr)?;
+    let mut stream = TcpStream::connect(addr)?;
 
     match matches.subcommand() {
-        ("get", Some(_smatches)) => unimplemented!(),
+        ("get", Some(smatches)) => match do_get(&mut stream, smatches.value_of("key").unwrap()) {
+            Ok(Some(val)) => {
+                println!("{}", val);
+                Ok(())
+            }
+            Ok(None) => {
+                println!("Key not found");
+                Ok(())
+            }
+            Err(err) => Err(err),
+            },
         ("set", Some(_smatches)) => unimplemented!(),
         ("rm", Some(_smatches)) => unimplemented!(),
         _ => panic!("clap should have detected missing subcommand"),
@@ -43,6 +64,12 @@ fn try_main() -> Result<()> {
 }
 
 fn main() {
+    // TODO: verbose level hardcoded
+    stderrlog::new()
+        .module(module_path!())
+        .verbosity(10)
+        .init()
+        .unwrap();
     match try_main() {
         Err(KvError::KeyNotFound(_)) => {
             // The spec states that these errors go to stdout.
