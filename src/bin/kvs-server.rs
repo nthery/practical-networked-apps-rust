@@ -1,13 +1,13 @@
 use clap::{App, Arg};
 use kvs::Result;
-use log::{error, debug, info};
-use std::error::Error;
-use std::net::SocketAddr;
-use std::net::{TcpListener, TcpStream};
-use serde_json;
 use kvs::{self, wire, KvStore};
+use log::{debug, error, info};
+use serde_json;
+use std::error::Error;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
+use std::net::SocketAddr;
+use std::net::{TcpListener, TcpStream};
 
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-server")
@@ -50,7 +50,7 @@ fn try_main() -> Result<()> {
             Err(err) => {
                 // Errors that can not be forwarded back to clients are logged instead.
                 error!("error while handling request: {}", err)
-            },
+            }
         }
     }
 
@@ -65,16 +65,26 @@ fn handle_request(store: &mut KvStore, maybe_stream: io::Result<TcpStream>) -> k
     let cmd: wire::Request = serde_json::from_str(&line)?;
     debug!("handling request {:?}", cmd);
     match cmd {
-        wire::Request::Get(key) => { 
+        wire::Request::Get(key) => {
             let reply = wire::Reply(store.get(key).map_err(|err| err.to_string()));
             send_reply(&mut stream, reply)?;
-        },
+        }
         wire::Request::Set(key, val) => {
-            let reply = wire::Reply(store.set(key, val).map(|_| None).map_err(|err| err.to_string()));
+            let reply = wire::Reply(
+                store
+                    .set(key, val)
+                    .map(|_| None)
+                    .map_err(|err| err.to_string()),
+            );
             send_reply(&mut stream, reply)?;
-        },
+        }
         wire::Request::Rm(key) => {
-            let reply = wire::Reply(store.remove(key).map(|_| None).map_err(|err| err.to_string()));
+            let reply = wire::Reply(
+                store
+                    .remove(key)
+                    .map(|_| None)
+                    .map_err(|err| err.to_string()),
+            );
             send_reply(&mut stream, reply)?;
         }
     };

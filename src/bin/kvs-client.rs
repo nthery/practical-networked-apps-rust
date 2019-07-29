@@ -1,11 +1,11 @@
 use clap::{App, AppSettings, Arg, SubCommand};
+use kvs::wire;
 use kvs::{KvError, Result};
+use log::debug;
 use std::error::Error;
 use std::io::prelude::*;
 use std::net::SocketAddr;
 use std::net::TcpStream;
-use kvs::wire;
-use log::debug;
 
 fn do_get(stream: &mut TcpStream, key: &str) -> Result<Option<String>> {
     let req = serde_json::to_string(&wire::Request::Get(key.to_string()))?;
@@ -71,12 +71,13 @@ fn try_main() -> Result<()> {
                 Ok(())
             }
             Err(err) => Err(err),
-            },
-        ("set", Some(smatches)) => do_set(&mut stream,
+        },
+        ("set", Some(smatches)) => do_set(
+            &mut stream,
             smatches.value_of("key").unwrap(),
-            smatches.value_of("value").unwrap()),
-        ("rm", Some(smatches)) => do_rm(&mut stream,
-            smatches.value_of("key").unwrap()),
+            smatches.value_of("value").unwrap(),
+        ),
+        ("rm", Some(smatches)) => do_rm(&mut stream, smatches.value_of("key").unwrap()),
         _ => panic!("clap should have detected missing subcommand"),
     }
 }
