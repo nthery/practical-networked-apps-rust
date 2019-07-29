@@ -12,20 +12,7 @@ use tempfile::NamedTempFile;
 
 pub struct KvsEngine;
 
-pub mod wire {
-    use serde::{Deserialize, Serialize};
-
-    // TODO: Use &str instead of String
-    #[derive(Debug, Serialize, Deserialize)]
-    pub enum Request {
-        Get(String),
-        Set(String, String),
-        Rm(String),
-    }
-
-    #[derive(Debug, Serialize, Deserialize)]
-    pub struct Reply(pub Result<Option<String>, String>);
-}
+pub mod wire;
 
 // TODO: encapsulate in struct storing what operation failed (set...)?
 #[derive(Debug)]
