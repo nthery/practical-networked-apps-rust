@@ -73,6 +73,10 @@ fn handle_request(store: &mut KvStore, maybe_stream: io::Result<TcpStream>) -> k
             let reply = wire::Reply(store.set(key, val).map(|_| None).map_err(|err| err.to_string()));
             send_reply(&mut stream, reply)?;
         },
+        wire::Request::Rm(key) => {
+            let reply = wire::Reply(store.remove(key).map(|_| None).map_err(|err| err.to_string()));
+            send_reply(&mut stream, reply)?;
+        }
     };
     Ok(())
 }

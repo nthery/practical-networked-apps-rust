@@ -23,6 +23,14 @@ fn do_set(stream: &mut TcpStream, key: &str, val: &str) -> Result<()> {
     reply.0.map(|_| ()).map_err(KvError::Server)
 }
 
+fn do_rm(stream: &mut TcpStream, key: &str) -> Result<()> {
+    let req = serde_json::to_string(&wire::Request::Rm(key.to_string()))?;
+    writeln!(stream, "{}", req)?;
+    let reply = serde_json::from_reader::<_, wire::Reply>(stream)?;
+    debug!("received {:?}", reply);
+    reply.0.map(|_| ()).map_err(KvError::Server)
+}
+
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-client")
         .version(env!("CARGO_PKG_VERSION"))
@@ -67,7 +75,8 @@ fn try_main() -> Result<()> {
         ("set", Some(smatches)) => do_set(&mut stream,
             smatches.value_of("key").unwrap(),
             smatches.value_of("value").unwrap()),
-        ("rm", Some(_smatches)) => unimplemented!(),
+        ("rm", Some(smatches)) => do_rm(&mut stream,
+            smatches.value_of("key").unwrap()),
         _ => panic!("clap should have detected missing subcommand"),
     }
 }

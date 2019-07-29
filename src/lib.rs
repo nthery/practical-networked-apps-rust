@@ -20,6 +20,7 @@ pub mod wire {
     pub enum Request {
         Get(String),
         Set(String, String),
+        Rm(String)
     }
 
     #[derive(Debug, Serialize, Deserialize)]
