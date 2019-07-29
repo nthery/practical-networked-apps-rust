@@ -1,12 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
+use std::io;
 use std::net;
-use std::path::{Path, PathBuf};
-use tempfile::NamedTempFile;
 
 // TODO: encapsulate in struct storing what operation failed (set...)?
 #[derive(Debug)]
@@ -61,5 +56,3 @@ impl std::error::Error for KvError {
 }
 
 pub type Result<T> = std::result::Result<T, KvError>;
-
-
