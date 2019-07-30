@@ -7,4 +7,5 @@ pub use error::Result;
 mod store;
 pub use store::KvStore;
 
-pub struct KvsEngine;
+mod engine;
+pub use engine::KvsEngine;

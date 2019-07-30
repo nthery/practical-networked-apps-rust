@@ -1,6 +1,5 @@
 use clap::{App, Arg};
-use kvs::Result;
-use kvs::{self, wire, KvStore};
+use kvs::{self, wire, KvStore, KvsEngine, Result};
 use log::{debug, error, info};
 use serde_json;
 use std::error::Error;

@@ -5,6 +5,7 @@ use std::io::{prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
+use crate::engine::KvsEngine;
 use crate::error::*;
 
 type Index = HashMap<String, u64>;
@@ -30,20 +31,8 @@ struct Header<'a> {
 
 const MAX_DEAD_ENTRIES: i32 = 64;
 
-// TODO: Most methods take String arguments because tests use str::to_owned().  There
-// must be a better way.
-impl KvStore {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
-        let filename = path.as_ref().join("kv.db");
-        let (map, dead_entries) = load_map_from(&filename)?;
-        Ok(KvStore {
-            filename,
-            map,
-            dead_entries,
-        })
-    }
-
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
+impl KvsEngine for KvStore {
+    fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
         let off = append_to_log(&self.filename, Tag::Set, &key, Some(&value))?;
         if self.map.insert(key, off).is_some() {
@@ -52,14 +41,14 @@ impl KvStore {
         Ok(())
     }
 
-    pub fn get(&self, key: String) -> Result<Option<String>> {
+    fn get(&self, key: String) -> Result<Option<String>> {
         Ok(match self.map.get(&key) {
             Some(off) => Some(self.read_value_from_log(*off)?),
             None => None,
         })
     }
 
-    pub fn remove(&mut self, key: String) -> Result<()> {
+    fn remove(&mut self, key: String) -> Result<()> {
         match self.map.get(&key) {
             Some(_) => {
                 // Update the in-ram map if and only if on-disk log updated.
@@ -72,6 +61,18 @@ impl KvStore {
             }
             None => Err(KvError::KeyNotFound(key)),
         }
+    }
+}
+
+impl KvStore {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
+        let filename = path.as_ref().join("kv.db");
+        let (map, dead_entries) = load_map_from(&filename)?;
+        Ok(KvStore {
+            filename,
+            map,
+            dead_entries,
+        })
     }
 
     fn read_value_from_log(&self, off: u64) -> Result<String> {

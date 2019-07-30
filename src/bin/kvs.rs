@@ -1,5 +1,5 @@
 use clap::{App, AppSettings, Arg, SubCommand};
-use kvs::{KvError, KvStore, Result};
+use kvs::{KvError, KvStore, KvsEngine, Result};
 use std::error::Error;
 
 fn try_main() -> Result<()> {
