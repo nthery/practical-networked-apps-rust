@@ -107,16 +107,13 @@ fn main() {
         .verbosity(10)
         .init()
         .unwrap();
-    match try_main() {
-        Err(err) => {
-            eprintln!("{}", err);
-            let mut src_opt = err.source();
-            while let Some(src) = src_opt {
-                eprintln!("caused by: {}", src);
-                src_opt = src.source();
-            }
-            std::process::exit(1);
+    if let Err(err) = try_main() {
+        eprintln!("{}", err);
+        let mut src_opt = err.source();
+        while let Some(src) = src_opt {
+            eprintln!("caused by: {}", src);
+            src_opt = src.source();
         }
-        Ok(_) => (),
+        std::process::exit(1);
     }
 }
