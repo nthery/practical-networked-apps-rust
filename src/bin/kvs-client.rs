@@ -1,4 +1,4 @@
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, ArgSettings, SubCommand};
 use kvs::wire;
 use kvs::{KvError, Result};
 use log::debug;
@@ -41,6 +41,7 @@ fn try_main() -> Result<()> {
             Arg::with_name("addr_port")
                 .long("addr")
                 .value_name("IP:PORT")
+                .set(ArgSettings::Global)
                 .help("Sets IP address and port to connect to")
                 .takes_value(true),
         )
