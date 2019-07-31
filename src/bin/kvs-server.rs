@@ -34,13 +34,13 @@ fn try_main() -> Result<()> {
         .unwrap_or("127.0.0.1:4000")
         .parse()?;
 
-    let engine = matches.value_of("engine").unwrap_or("kvs");
+    let engine = matches.value_of("engine");
 
     info!("version: {}", env!("CARGO_PKG_VERSION"));
-    info!("engine: {}", engine);
+    info!("engine: {}", engine.unwrap_or("default"));
     info!("address: {}", addr);
 
-    let mut store = kvs::open_engine(&engine)?;
+    let mut store = kvs::open_engine(engine)?;
 
     let l = TcpListener::bind(addr)?;
     for sr in l.incoming() {

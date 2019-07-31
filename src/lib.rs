@@ -15,8 +15,40 @@ pub use sled_be::SledKvsEngine;
 mod engine;
 pub use engine::KvsEngine;
 
-pub fn open_engine(name: &str) -> Result<Box<dyn KvsEngine>> {
-    // TODO: detect existing engine data
+pub fn open_engine(name_opt: Option<&str>) -> Result<Box<dyn KvsEngine>> {
+    let mut data_found: Option<&str> = None;
+    for entry in fs::read_dir(".")? {
+        let dir_found = match entry?.file_name().to_str() {
+            Some("pna-kvs") => Some("kvs"),
+            Some("pna-sled") => Some("sled"),
+            _ => None,
+        };
+        if dir_found.is_some() {
+            if data_found.is_some() {
+                return Err(KvError::BadEngine);
+            }
+            data_found = dir_found
+        }
+    }
+
+    let name = match name_opt {
+        Some(n) => {
+            if let Some(d) = data_found {
+                if n != d {
+                    return Err(KvError::BadEngine);
+                }
+            }
+            n
+        }
+        None => {
+            if let Some(n) = data_found {
+                n
+            } else {
+                "kvs"
+            }
+        }
+    };
+
     match name {
         "kvs" => {
             let dirname = "pna-kvs";

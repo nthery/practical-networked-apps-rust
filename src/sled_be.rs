@@ -13,10 +13,9 @@ impl SledKvsEngine {
 
 impl KvsEngine for SledKvsEngine {
     fn set(&mut self, key: String, value: String) -> Result<()> {
-        self.0
-            .set(key.as_bytes(), value.as_bytes())
-            .map(|_| ())
-            .map_err(KvError::Sled)
+        self.0.set(key.as_bytes(), value.as_bytes())?;
+        self.0.flush()?;
+        Ok(())
     }
 
     fn get(&self, key: String) -> Result<Option<String>> {
@@ -28,9 +27,10 @@ impl KvsEngine for SledKvsEngine {
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
-        match self.0.del(key.as_bytes())? {
-            Some(_) => Ok(()),
-            None => Err(KvError::KeyNotFound(key)),
+        if self.0.del(key.as_bytes())?.is_none() {
+            return Err(KvError::KeyNotFound(key));
         }
+        self.0.flush()?;
+        Ok(())
     }
 }

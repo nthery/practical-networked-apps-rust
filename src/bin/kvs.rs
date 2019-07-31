@@ -24,7 +24,7 @@ fn try_main() -> Result<()> {
         .subcommand(SubCommand::with_name("rm").arg(Arg::with_name("key").required(true).index(1)))
         .get_matches();
 
-    let engine = matches.value_of("engine").unwrap_or("kvs");
+    let engine = matches.value_of("engine");
     let mut store = kvs::open_engine(engine)?;
 
     match matches.subcommand() {
