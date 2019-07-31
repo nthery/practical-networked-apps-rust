@@ -6,8 +6,8 @@ mod error;
 pub use error::KvError;
 pub use error::Result;
 
-mod store;
-pub use store::KvStore;
+mod store_be;
+pub use store_be::KvStore;
 
 mod sled_be;
 pub use sled_be::SledKvsEngine;
