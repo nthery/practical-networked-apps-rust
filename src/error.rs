@@ -10,6 +10,7 @@ pub enum KvError {
     Serde(serde_json::Error),
     KeyNotFound(String),
     Server(String),
+    UnknownEngine,
     Other(Box<dyn std::error::Error>),
 }
 
@@ -38,6 +39,7 @@ impl fmt::Display for KvError {
             KvError::Serde(_) => write!(f, "Serialization error"),
             KvError::KeyNotFound(ref key) => write!(f, "Key not found: {}", key),
             KvError::Server(ref msg) => write!(f, "Server error: {}", msg),
+            KvError::UnknownEngine => write!(f, "Unknown engine"),
             KvError::Other(ref err) => write!(f, "Other error: {}", err),
         }
     }
@@ -50,6 +52,7 @@ impl std::error::Error for KvError {
             KvError::Serde(ref err) => Some(err),
             KvError::KeyNotFound(_) => None,
             KvError::Server(_) => None,
+            KvError::UnknownEngine => None,
             KvError::Other(ref err) => err.source(),
         }
     }

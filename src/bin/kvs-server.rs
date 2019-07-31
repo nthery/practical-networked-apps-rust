@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use kvs::{self, wire, KvStore, KvsEngine, Result};
+use kvs::{self, wire, KvsEngine, Result};
 use log::{debug, error, info};
 use serde_json;
 use std::error::Error;
@@ -40,11 +40,11 @@ fn try_main() -> Result<()> {
     info!("engine: {}", engine);
     info!("address: {}", addr);
 
-    let mut store = KvStore::open(".")?;
+    let mut store = kvs::open_engine(&engine)?;
 
     let l = TcpListener::bind(addr)?;
     for sr in l.incoming() {
-        match handle_request(&mut store, sr) {
+        match handle_request(store.as_mut(), sr) {
             Ok(_) => debug!("handled request successfully"),
             Err(err) => {
                 // Errors that can not be forwarded back to clients are logged instead.
@@ -56,7 +56,10 @@ fn try_main() -> Result<()> {
     Ok(())
 }
 
-fn handle_request(store: &mut KvStore, maybe_stream: io::Result<TcpStream>) -> kvs::Result<()> {
+fn handle_request(
+    store: &mut dyn KvsEngine,
+    maybe_stream: io::Result<TcpStream>,
+) -> kvs::Result<()> {
     let mut stream = maybe_stream?;
     let mut rd = BufReader::new(&stream);
     let mut line = String::new();

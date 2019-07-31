@@ -1,5 +1,5 @@
 use clap::{App, AppSettings, Arg, SubCommand};
-use kvs::{KvError, KvStore, KvsEngine, Result};
+use kvs::{self, KvError, Result};
 use std::error::Error;
 
 fn try_main() -> Result<()> {
@@ -17,7 +17,7 @@ fn try_main() -> Result<()> {
         .subcommand(SubCommand::with_name("rm").arg(Arg::with_name("key").required(true).index(1)))
         .get_matches();
 
-    let mut store = KvStore::open(".")?;
+    let mut store = kvs::open_engine("kvs")?;
 
     match matches.subcommand() {
         ("get", Some(smatches)) => match store.get(smatches.value_of("key").unwrap().to_owned()) {
