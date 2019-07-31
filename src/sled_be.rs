@@ -30,7 +30,7 @@ impl KvsEngine for SledKvsEngine {
     fn remove(&mut self, key: String) -> Result<()> {
         match self.0.del(key.as_bytes())? {
             Some(_) => Ok(()),
-            None => Err(KvError::KeyNotFound(key))
+            None => Err(KvError::KeyNotFound(key)),
         }
     }
 }
