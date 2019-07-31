@@ -8,6 +8,7 @@ use std::net;
 pub enum KvError {
     Io(io::Error),
     Serde(serde_json::Error),
+    Sled(sled::Error),
     KeyNotFound(String),
     Server(String),
     UnknownEngine,
@@ -17,6 +18,12 @@ pub enum KvError {
 impl From<serde_json::Error> for KvError {
     fn from(err: serde_json::Error) -> KvError {
         KvError::Serde(err)
+    }
+}
+
+impl From<sled::Error> for KvError {
+    fn from(err: sled::Error) -> KvError {
+        KvError::Sled(err)
     }
 }
 
@@ -37,6 +44,7 @@ impl fmt::Display for KvError {
         match *self {
             KvError::Io(_) => write!(f, "I/O error"),
             KvError::Serde(_) => write!(f, "Serialization error"),
+            KvError::Sled(_) => write!(f, "Sled error"),
             KvError::KeyNotFound(ref key) => write!(f, "Key not found: {}", key),
             KvError::Server(ref msg) => write!(f, "Server error: {}", msg),
             KvError::UnknownEngine => write!(f, "Unknown engine"),
@@ -50,6 +58,7 @@ impl std::error::Error for KvError {
         match *self {
             KvError::Io(ref err) => Some(err),
             KvError::Serde(ref err) => Some(err),
+            KvError::Sled(ref err) => Some(err),
             KvError::KeyNotFound(_) => None,
             KvError::Server(_) => None,
             KvError::UnknownEngine => None,

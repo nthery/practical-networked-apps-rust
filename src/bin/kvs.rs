@@ -8,6 +8,13 @@ fn try_main() -> Result<()> {
         .author(env!("CARGO_PKG_AUTHORS"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .setting(AppSettings::SubcommandRequired)
+        .arg(
+            Arg::with_name("engine")
+                .long("engine")
+                .value_name("ENGINE-NAME")
+                .help("Sets key-value store backend")
+                .takes_value(true),
+        )
         .subcommand(SubCommand::with_name("get").arg(Arg::with_name("key").required(true).index(1)))
         .subcommand(
             SubCommand::with_name("set")
@@ -17,7 +24,8 @@ fn try_main() -> Result<()> {
         .subcommand(SubCommand::with_name("rm").arg(Arg::with_name("key").required(true).index(1)))
         .get_matches();
 
-    let mut store = kvs::open_engine("kvs")?;
+    let engine = matches.value_of("engine").unwrap_or("kvs");
+    let mut store = kvs::open_engine(engine)?;
 
     match matches.subcommand() {
         ("get", Some(smatches)) => match store.get(smatches.value_of("key").unwrap().to_owned()) {
