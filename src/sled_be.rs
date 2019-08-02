@@ -12,6 +12,10 @@ impl SledKvsEngine {
 }
 
 impl KvsEngine for SledKvsEngine {
+    fn open<P: AsRef<Path>>(path: P) -> Result<SledKvsEngine> {
+        Ok(SledKvsEngine(Db::start_default(path.as_ref())?))
+    }
+
     fn set(&mut self, key: String, value: String) -> Result<()> {
         self.0.set(key.as_bytes(), value.as_bytes())?;
         self.0.flush()?;

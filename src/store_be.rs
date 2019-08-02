@@ -32,6 +32,16 @@ struct Header<'a> {
 const MAX_DEAD_ENTRIES: i32 = 64;
 
 impl KvsEngine for KvStore {
+    fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
+        let filename = path.as_ref().join("kv.db");
+        let (map, dead_entries) = load_map_from(&filename)?;
+        Ok(KvStore {
+            filename,
+            map,
+            dead_entries,
+        })
+    }
+
     fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
         let off = append_to_log(&self.filename, Tag::Set, &key, Some(&value))?;
@@ -65,16 +75,6 @@ impl KvsEngine for KvStore {
 }
 
 impl KvStore {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
-        let filename = path.as_ref().join("kv.db");
-        let (map, dead_entries) = load_map_from(&filename)?;
-        Ok(KvStore {
-            filename,
-            map,
-            dead_entries,
-        })
-    }
-
     fn read_value_from_log(&self, off: u64) -> Result<String> {
         let file = OpenOptions::new().read(true).open(&self.filename)?;
         let mut rd = BufReader::new(&file);
@@ -197,4 +197,21 @@ fn append_to_open_log(
     }
 
     Ok(off)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reopen() -> Result<()> {
+        let tmpdir = tempfile::tempdir()?;
+        {
+            let mut kvs = KvStore::open(&tmpdir)?;
+            kvs.set("k".to_string(), "v".to_string())?;
+        }
+        let kvs2 = KvStore::open(&tmpdir)?;
+        assert_eq!(kvs2.get("k".to_string())?, Some("v".to_string()));
+        Ok(())
+    }
 }
