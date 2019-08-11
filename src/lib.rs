@@ -12,6 +12,8 @@ pub use store_be::KvStore;
 mod engine;
 pub use engine::KvsEngine;
 
+pub mod thread_pool;
+
 pub fn open_engine(name_opt: Option<&str>) -> Result<Box<dyn KvsEngine>> {
     let mut data_found: Option<&str> = None;
     for entry in fs::read_dir(".")? {

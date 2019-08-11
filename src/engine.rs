@@ -10,7 +10,7 @@ pub trait KvsEngine {
     where
         Self: Sized;
 
-    fn set(&mut self, key: String, value: String) -> Result<()>;
+    fn set(&self, key: String, value: String) -> Result<()>;
     fn get(&self, key: String) -> Result<Option<String>>;
-    fn remove(&mut self, key: String) -> Result<()>;
+    fn remove(&self, key: String) -> Result<()>;
 }

@@ -25,7 +25,7 @@ fn try_main() -> Result<()> {
         .get_matches();
 
     let engine = matches.value_of("engine");
-    let mut store = kvs::open_engine(engine)?;
+    let store = kvs::open_engine(engine)?;
 
     match matches.subcommand() {
         ("get", Some(smatches)) => match store.get(smatches.value_of("key").unwrap().to_owned()) {
