@@ -9,9 +9,6 @@ pub use error::Result;
 mod store_be;
 pub use store_be::KvStore;
 
-mod sled_be;
-pub use sled_be::SledKvsEngine;
-
 mod engine;
 pub use engine::KvsEngine;
 
@@ -56,9 +53,12 @@ pub fn open_engine(name_opt: Option<&str>) -> Result<Box<dyn KvsEngine>> {
             Ok(Box::new(KvStore::open(&dirname)?))
         }
         "sled" => {
+            /*
             let dirname = "pna-sled";
             fs::create_dir_all(&dirname)?;
             Ok(Box::new(SledKvsEngine::open(&dirname)?))
+            */
+            unimplemented!()
         }
         _ => Err(KvError::UnknownEngine),
     }
