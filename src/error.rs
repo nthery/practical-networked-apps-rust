@@ -13,7 +13,7 @@ pub enum KvError {
     BadEngine,
     Server(String),
     UnknownEngine,
-    Other(Box<dyn std::error::Error>),
+    Other(String),
 }
 
 impl From<serde_json::Error> for KvError {
@@ -36,7 +36,7 @@ impl From<io::Error> for KvError {
 
 impl From<net::AddrParseError> for KvError {
     fn from(err: net::AddrParseError) -> KvError {
-        KvError::Other(Box::new(err))
+        KvError::Other(format!("{}", err).to_owned())
     }
 }
 
@@ -65,7 +65,7 @@ impl std::error::Error for KvError {
             KvError::BadEngine => None,
             KvError::Server(_) => None,
             KvError::UnknownEngine => None,
-            KvError::Other(ref err) => err.source(),
+            KvError::Other(_) => None,
         }
     }
 }
