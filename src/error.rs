@@ -36,7 +36,13 @@ impl From<io::Error> for KvError {
 
 impl From<net::AddrParseError> for KvError {
     fn from(err: net::AddrParseError) -> KvError {
-        KvError::Other(format!("{}", err).to_owned())
+        KvError::Other(format!("Error while parsing IP address: {}", err).to_owned())
+    }
+}
+
+impl<T> From<std::sync::PoisonError<T>> for KvError {
+    fn from(err: std::sync::PoisonError<T>) -> KvError {
+        KvError::Other(format!("Error while locking mutex: {}", err).to_owned())
     }
 }
 
@@ -50,7 +56,7 @@ impl fmt::Display for KvError {
             KvError::BadEngine => write!(f, "Selected engine does not support stored data"),
             KvError::Server(ref msg) => write!(f, "Server error: {}", msg),
             KvError::UnknownEngine => write!(f, "Unknown engine"),
-            KvError::Other(ref err) => write!(f, "Other error: {}", err),
+            KvError::Other(ref err) => write!(f, "{}", err),
         }
     }
 }

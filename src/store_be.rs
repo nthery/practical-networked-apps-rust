@@ -1,19 +1,29 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{prelude::*, BufReader, ErrorKind, SeekFrom};
+use std::fs::{self, File, OpenOptions};
+use std::io::{prelude::*, BufReader, BufWriter, ErrorKind, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use tempfile::NamedTempFile;
 
 use crate::engine::KvsEngine;
 use crate::error::*;
 
 type Index = HashMap<String, u64>;
 
+/// Thread-safe key-value store.
 #[derive(Clone)]
 pub struct KvStore {
+    // TODO: use RwLock instead?
+    raw: Arc<Mutex<RawStore>>,
+}
+
+/// Store data shared between worker threads.
+#[derive(Clone)]
+struct RawStore {
     filename: PathBuf,
     map: Index,
-    _dead_entries: i32,
+    dead_entries: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -29,17 +39,12 @@ struct Header<'a> {
     value_size: usize,
 }
 
-// TODO: resurect
-// const MAX_DEAD_ENTRIES: i32 = 64;
+const MAX_DEAD_ENTRIES: i32 = 64;
 
 impl KvsEngine for KvStore {
     fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
-        let filename = path.as_ref().join("kv.db");
-        let (map, dead_entries) = load_map_from(&filename)?;
-        Ok(KvStore {
-            filename,
-            map,
-            _dead_entries: dead_entries,
+        RawStore::open(path).map(|raw| KvStore {
+            raw: Arc::new(Mutex::new(raw)),
         })
     }
 
@@ -47,16 +52,37 @@ impl KvsEngine for KvStore {
         Box::new(self.clone())
     }
 
-    fn set(&self, _key: String, _value: String) -> Result<()> {
-        /*
+    fn set(&self, key: String, value: String) -> Result<()> {
+        self.raw.lock()?.set(key, value)
+    }
+
+    fn get(&self, key: String) -> Result<Option<String>> {
+        self.raw.lock()?.get(key)
+    }
+
+    fn remove(&self, key: String) -> Result<()> {
+        self.raw.lock()?.remove(key)
+    }
+}
+
+impl RawStore {
+    fn open<P: AsRef<Path>>(path: P) -> Result<RawStore> {
+        let filename = path.as_ref().join("kv.db");
+        let (map, dead_entries) = load_map_from(&filename)?;
+        Ok(RawStore {
+            filename,
+            map,
+            dead_entries,
+        })
+    }
+
+    fn set(&mut self, key: String, value: String) -> Result<()> {
         // Update the in-ram map if and only if on-disk log updated.
         let off = append_to_log(&self.filename, Tag::Set, &key, Some(&value))?;
         if self.map.insert(key, off).is_some() {
             self.add_dead_entry()?;
         }
         Ok(())
-        */
-        unimplemented!()
     }
 
     fn get(&self, key: String) -> Result<Option<String>> {
@@ -66,8 +92,7 @@ impl KvsEngine for KvStore {
         })
     }
 
-    fn remove(&self, _key: String) -> Result<()> {
-        /*
+    fn remove(&mut self, key: String) -> Result<()> {
         match self.map.get(&key) {
             Some(_) => {
                 // Update the in-ram map if and only if on-disk log updated.
@@ -80,12 +105,8 @@ impl KvsEngine for KvStore {
             }
             None => Err(KvError::KeyNotFound(key)),
         }
-        */
-        unimplemented!()
     }
-}
 
-impl KvStore {
     fn read_value_from_log(&self, off: u64) -> Result<String> {
         let file = OpenOptions::new().read(true).open(&self.filename)?;
         let mut rd = BufReader::new(&file);
@@ -100,9 +121,6 @@ impl KvStore {
         // the map_err() call.
         serde_json::from_str(&ser_val).map_err(KvError::Serde)
     }
-
-    /*
-     TODO: resurect
 
     fn add_dead_entry(&mut self) -> Result<()> {
         self.dead_entries += 1;
@@ -133,7 +151,6 @@ impl KvStore {
 
         Ok(())
     }
-    */
 }
 
 fn load_map_from(path: &Path) -> Result<(Index, i32)> {
@@ -176,8 +193,6 @@ fn load_map_from(path: &Path) -> Result<(Index, i32)> {
     Ok((kvs, dead_entries))
 }
 
-/*
-TODO: resurect
 fn append_to_log(path: &Path, tag: Tag, key: &str, val_opt: Option<&str>) -> Result<u64> {
     let file = OpenOptions::new().append(true).create(true).open(path)?;
     let mut wr = BufWriter::new(&file);
@@ -215,7 +230,6 @@ fn append_to_open_log(
 
     Ok(off)
 }
-*/
 
 #[cfg(test)]
 mod tests {
