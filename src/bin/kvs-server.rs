@@ -1,12 +1,10 @@
 use clap::{App, Arg};
-use kvs::{self, wire, KvsEngine, Result};
-use log::{debug, error, info};
-use serde_json;
+use kvs::{self, KvsServer, Result};
+use log::info;
+
 use std::error::Error;
-use std::io::prelude::*;
-use std::io::{self, BufReader};
+
 use std::net::SocketAddr;
-use std::net::{TcpListener, TcpStream};
 
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-server")
@@ -42,62 +40,7 @@ fn try_main() -> Result<()> {
 
     let mut store = kvs::open_engine(engine)?;
 
-    let l = TcpListener::bind(addr)?;
-    for sr in l.incoming() {
-        match handle_request(store.as_mut(), sr) {
-            Ok(_) => debug!("handled request successfully"),
-            Err(err) => {
-                // Errors that can not be forwarded back to clients are logged instead.
-                error!("error while handling request: {}", err)
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn handle_request(
-    store: &mut dyn KvsEngine,
-    maybe_stream: io::Result<TcpStream>,
-) -> kvs::Result<()> {
-    let mut stream = maybe_stream?;
-    let mut rd = BufReader::new(&stream);
-    let mut line = String::new();
-    rd.read_line(&mut line)?;
-    let cmd: wire::Request = serde_json::from_str(&line)?;
-    debug!("handling request {:?}", cmd);
-    match cmd {
-        wire::Request::Get(key) => {
-            let reply = wire::Reply(store.get(key).map_err(|err| err.to_string()));
-            send_reply(&mut stream, reply)?;
-        }
-        wire::Request::Set(key, val) => {
-            let reply = wire::Reply(
-                store
-                    .set(key, val)
-                    .map(|_| None)
-                    .map_err(|err| err.to_string()),
-            );
-            send_reply(&mut stream, reply)?;
-        }
-        wire::Request::Rm(key) => {
-            let reply = wire::Reply(
-                store
-                    .remove(key)
-                    .map(|_| None)
-                    .map_err(|err| err.to_string()),
-            );
-            send_reply(&mut stream, reply)?;
-        }
-    };
-    Ok(())
-}
-
-fn send_reply(wr: &mut impl Write, r: wire::Reply) -> kvs::Result<()> {
-    debug!("replying {:?}", r);
-    let ser = serde_json::to_string(&r)?;
-    writeln!(wr, "{}", ser)?;
-    Ok(())
+    KvsServer::new(store.as_mut(), addr)?.run()
 }
 
 fn main() {

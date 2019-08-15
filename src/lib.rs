@@ -12,6 +12,9 @@ pub use store_be::KvStore;
 mod engine;
 pub use engine::KvsEngine;
 
+mod server;
+pub use server::KvsServer;
+
 pub mod thread_pool;
 
 pub fn open_engine(name_opt: Option<&str>) -> Result<Box<dyn KvsEngine>> {
