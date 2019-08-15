@@ -1,8 +1,11 @@
-use crate::{wire, KvsEngine, Result};
+use crate::{thread_pool::*, wire, KvsEngine, Result};
 use log::{debug, error};
 use std::io::{prelude::*, BufReader};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
+
+// TODO: Make it f(# core)?
+const NTHREADS: u32 = 8;
 
 /// TCP/IP server handling requests from KvsClient instances.
 pub struct KvsServer {
@@ -21,19 +24,25 @@ impl KvsServer {
 
     /// Serves requests forever or until a fatal error occurs.
     pub fn run(&mut self) -> Result<()> {
-        for sr in self.listener.incoming() {
-            match self.handle_request(sr?) {
-                Ok(_) => debug!("handled request successfully"),
-                Err(err) => {
-                    // Errors that can not be forwarded back to clients are logged instead.
-                    error!("error while handling request: {}", err)
+        let pool = NaiveThreadPool::new(NTHREADS)?;
+
+        for stream in self.listener.incoming() {
+            let engine = self.engine.clone();
+            let stream = stream?;
+            pool.spawn(move || {
+                match Self::handle_request(engine.as_ref(), stream) {
+                    Ok(_) => debug!("handled request successfully"),
+                    Err(err) => {
+                        // Errors that can not be forwarded back to clients are logged instead.
+                        error!("error while handling request: {}", err)
+                    }
                 }
-            }
+            })
         }
         Ok(())
     }
 
-    fn handle_request(&self, mut stream: TcpStream) -> Result<()> {
+    fn handle_request(engine: &dyn KvsEngine, mut stream: TcpStream) -> Result<()> {
         let mut rd = BufReader::new(&stream);
         let mut line = String::new();
         rd.read_line(&mut line)?;
@@ -41,12 +50,12 @@ impl KvsServer {
         debug!("handling request {:?}", cmd);
         match cmd {
             wire::Request::Get(key) => {
-                let reply = wire::Reply(self.engine.get(key).map_err(|err| err.to_string()));
+                let reply = wire::Reply(engine.get(key).map_err(|err| err.to_string()));
                 send_reply(&mut stream, reply)?;
             }
             wire::Request::Set(key, val) => {
                 let reply = wire::Reply(
-                    self.engine
+                    engine
                         .set(key, val)
                         .map(|_| None)
                         .map_err(|err| err.to_string()),
@@ -55,7 +64,7 @@ impl KvsServer {
             }
             wire::Request::Rm(key) => {
                 let reply = wire::Reply(
-                    self.engine
+                    engine
                         .remove(key)
                         .map(|_| None)
                         .map_err(|err| err.to_string()),

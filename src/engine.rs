@@ -2,7 +2,7 @@ use crate::error::Result;
 
 // TODO: Most methods take String arguments because tests use str::to_owned().  There
 // must be a better way.
-pub trait KvsEngine: Send + 'static {
+pub trait KvsEngine: Send + Sync + 'static {
     /// Creates a new engine or loads content from an existing one.
     ///
     /// This function is not in the spec but it allows to factor out benchmarks.
