@@ -10,7 +10,20 @@ pub trait KvsEngine {
     where
         Self: Sized;
 
+    /// Returns a clone of this engine wrapped into a box.
+    ///
+    /// The spec calls for deriving this trait from Clone but this prevents from using trait
+    /// objects (e.g. open_engine(...) -> Box<dyn KvsEngine).  So we add a layer of indirection: we
+    /// implement Clone for Box<dyn KvsEngine> which calls this function.
+    fn boxed_clone(&self) -> Box<dyn KvsEngine>;
+
     fn set(&self, key: String, value: String) -> Result<()>;
     fn get(&self, key: String) -> Result<Option<String>>;
     fn remove(&self, key: String) -> Result<()>;
+}
+
+impl Clone for Box<dyn KvsEngine> {
+    fn clone(&self) -> Self {
+        unimplemented!()
+    }
 }

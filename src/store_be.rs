@@ -9,6 +9,7 @@ use crate::error::*;
 
 type Index = HashMap<String, u64>;
 
+#[derive(Clone)]
 pub struct KvStore {
     filename: PathBuf,
     map: Index,
@@ -40,6 +41,10 @@ impl KvsEngine for KvStore {
             map,
             _dead_entries: dead_entries,
         })
+    }
+
+    fn boxed_clone(&self) -> Box<dyn KvsEngine> {
+        Box::new(self.clone())
     }
 
     fn set(&self, _key: String, _value: String) -> Result<()> {
@@ -76,12 +81,6 @@ impl KvsEngine for KvStore {
             None => Err(KvError::KeyNotFound(key)),
         }
         */
-        unimplemented!()
-    }
-}
-
-impl Clone for KvStore {
-    fn clone(&self) -> Self {
         unimplemented!()
     }
 }
