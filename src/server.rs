@@ -3,7 +3,7 @@ use log::{debug, error};
 use std::io::{prelude::*, BufReader};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 
-/// Key-value store server handling requests from KvsClient instances.
+/// TCP/IP server handling requests from KvsClient instances.
 pub struct KvsServer<'a> {
     listener: TcpListener,
     engine: &'a mut dyn KvsEngine,

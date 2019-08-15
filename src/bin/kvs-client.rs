@@ -1,35 +1,9 @@
 use clap::{App, AppSettings, Arg, ArgSettings, SubCommand};
-use kvs::wire;
-use kvs::{KvError, Result};
-use log::debug;
+use kvs::{KvError, KvsClient, Result};
+
 use std::error::Error;
-use std::io::prelude::*;
+
 use std::net::SocketAddr;
-use std::net::TcpStream;
-
-fn do_get(stream: &mut TcpStream, key: &str) -> Result<Option<String>> {
-    let req = serde_json::to_string(&wire::Request::Get(key.to_string()))?;
-    writeln!(stream, "{}", req)?;
-    let reply = serde_json::from_reader::<_, wire::Reply>(stream)?;
-    debug!("received {:?}", reply);
-    reply.0.map_err(KvError::Server)
-}
-
-fn do_set(stream: &mut TcpStream, key: &str, val: &str) -> Result<()> {
-    let req = serde_json::to_string(&wire::Request::Set(key.to_string(), val.to_string()))?;
-    writeln!(stream, "{}", req)?;
-    let reply = serde_json::from_reader::<_, wire::Reply>(stream)?;
-    debug!("received {:?}", reply);
-    reply.0.map(|_| ()).map_err(KvError::Server)
-}
-
-fn do_rm(stream: &mut TcpStream, key: &str) -> Result<()> {
-    let req = serde_json::to_string(&wire::Request::Rm(key.to_string()))?;
-    writeln!(stream, "{}", req)?;
-    let reply = serde_json::from_reader::<_, wire::Reply>(stream)?;
-    debug!("received {:?}", reply);
-    reply.0.map(|_| ()).map_err(KvError::Server)
-}
 
 fn try_main() -> Result<()> {
     let matches = App::new("kvs-client")
@@ -59,10 +33,10 @@ fn try_main() -> Result<()> {
         .unwrap_or("127.0.0.1:4000")
         .parse()?;
 
-    let mut stream = TcpStream::connect(addr)?;
+    let mut client = KvsClient::new(addr)?;
 
     match matches.subcommand() {
-        ("get", Some(smatches)) => match do_get(&mut stream, smatches.value_of("key").unwrap()) {
+        ("get", Some(smatches)) => match client.get(smatches.value_of("key").unwrap()) {
             Ok(Some(val)) => {
                 println!("{}", val);
                 Ok(())
@@ -73,12 +47,11 @@ fn try_main() -> Result<()> {
             }
             Err(err) => Err(err),
         },
-        ("set", Some(smatches)) => do_set(
-            &mut stream,
+        ("set", Some(smatches)) => client.set(
             smatches.value_of("key").unwrap(),
             smatches.value_of("value").unwrap(),
         ),
-        ("rm", Some(smatches)) => do_rm(&mut stream, smatches.value_of("key").unwrap()),
+        ("rm", Some(smatches)) => client.rm(smatches.value_of("key").unwrap()),
         _ => panic!("clap should have detected missing subcommand"),
     }
 }

@@ -1,6 +1,6 @@
 use std::fs;
 
-pub mod wire;
+mod wire;
 
 mod error;
 pub use error::KvError;
@@ -12,6 +12,8 @@ pub use store_be::KvStore;
 mod engine;
 pub use engine::KvsEngine;
 
+mod client;
+pub use client::KvsClient;
 mod server;
 pub use server::KvsServer;
 
