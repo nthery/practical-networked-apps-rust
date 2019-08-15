@@ -48,11 +48,9 @@ fn kvs_write(c: &mut Criterion) {
     generic_write::<KvStore>(c, "kvs_write")
 }
 
-/*
 fn sled_write(c: &mut Criterion) {
     generic_write::<SledKvsEngine>(c, "sled_write")
 }
-*/
 
 fn engine_read(engine: &impl KvsEngine, pairs: &Vec<(String, String)>) {
     let mut rng = SmallRng::seed_from_u64(0x0DDB1A5E5BAD5EEDu64);
@@ -87,11 +85,9 @@ fn kvs_read(c: &mut Criterion) {
     generic_read::<KvStore>(c, "kvs_read");
 }
 
-/*
 fn sled_read(c: &mut Criterion) {
     generic_read::<SledKvsEngine>(c, "sled_read");
 }
-*/
 
-criterion_group!(benches, kvs_write, kvs_read);
+criterion_group!(benches, kvs_write, kvs_read, sled_write, sled_read);
 criterion_main!(benches);
