@@ -21,9 +21,3 @@ pub trait KvsEngine: Send + 'static {
     fn get(&self, key: String) -> Result<Option<String>>;
     fn remove(&self, key: String) -> Result<()>;
 }
-
-impl Clone for Box<dyn KvsEngine> {
-    fn clone(&self) -> Self {
-        unimplemented!()
-    }
-}

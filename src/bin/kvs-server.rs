@@ -38,9 +38,8 @@ fn try_main() -> Result<()> {
     info!("engine: {}", engine.unwrap_or("default"));
     info!("address: {}", addr);
 
-    let mut store = kvs::open_engine(engine)?;
-
-    KvsServer::new(store.as_mut(), addr)?.run()
+    let store = kvs::open_engine(engine)?;
+    KvsServer::new(store, addr)?.run()
 }
 
 fn main() {

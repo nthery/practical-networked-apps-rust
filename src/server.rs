@@ -2,16 +2,17 @@ use crate::{wire, KvsEngine, Result};
 use log::{debug, error};
 use std::io::{prelude::*, BufReader};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
 
 /// TCP/IP server handling requests from KvsClient instances.
-pub struct KvsServer<'a> {
+pub struct KvsServer {
     listener: TcpListener,
-    engine: &'a mut dyn KvsEngine,
+    engine: Arc<dyn KvsEngine>,
 }
 
-impl KvsServer<'_> {
+impl KvsServer {
     /// Creates a new server listening for requests on `addr` and delegating requests to `engine`.
-    pub fn new(engine: &mut dyn KvsEngine, addr: SocketAddr) -> Result<KvsServer> {
+    pub fn new(engine: Arc<dyn KvsEngine>, addr: SocketAddr) -> Result<KvsServer> {
         Ok(KvsServer {
             listener: TcpListener::bind(addr)?,
             engine,

@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::Arc;
 
 mod wire;
 
@@ -22,7 +23,11 @@ pub use server::KvsServer;
 
 pub mod thread_pool;
 
-pub fn open_engine(name_opt: Option<&str>) -> Result<Box<dyn KvsEngine>> {
+/// Creates a new store or opens an existing one in the current directory.
+///
+/// TODO: Returning an Arc value is convenient for the KvStore engine but suboptimal for
+/// SledKvsEngine because the latter already uses Arc values internally.
+pub fn open_engine(name_opt: Option<&str>) -> Result<Arc<dyn KvsEngine>> {
     let mut data_found: Option<&str> = None;
     for entry in fs::read_dir(".")? {
         let dir_found = match entry?.file_name().to_str() {
@@ -60,12 +65,12 @@ pub fn open_engine(name_opt: Option<&str>) -> Result<Box<dyn KvsEngine>> {
         "kvs" => {
             let dirname = "pna-kvs";
             fs::create_dir_all(&dirname)?;
-            Ok(Box::new(KvStore::open(&dirname)?))
+            Ok(Arc::new(KvStore::open(&dirname)?))
         }
         "sled" => {
             let dirname = "pna-sled";
             fs::create_dir_all(&dirname)?;
-            Ok(Box::new(SledKvsEngine::open(&dirname)?))
+            Ok(Arc::new(SledKvsEngine::open(&dirname)?))
         }
         _ => Err(KvError::UnknownEngine),
     }
