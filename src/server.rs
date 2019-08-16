@@ -24,7 +24,7 @@ impl KvsServer {
 
     /// Serves requests forever or until a fatal error occurs.
     pub fn run(&mut self) -> Result<()> {
-        let pool = NaiveThreadPool::new(NTHREADS)?;
+        let pool = SharedQueueThreadPool::new(NTHREADS)?;
 
         for stream in self.listener.incoming() {
             let engine = self.engine.clone();
