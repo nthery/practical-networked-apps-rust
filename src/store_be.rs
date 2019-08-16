@@ -15,6 +15,10 @@ type Index = HashMap<String, u64>;
 #[derive(Clone)]
 pub struct KvStore {
     // TODO: use RwLock instead?
+    // TODO: The Arc layer is redundant because we manage KvsEngine trait objects via
+    // Arc pointers already.  However some tests require KvsEngine to implement Clone
+    // so we cannot simply remove it.  Actually clonable engines seem to prevent using
+    // trait objects altogether.  The reference implementation uses generic only.
     raw: Arc<Mutex<RawStore>>,
 }
 

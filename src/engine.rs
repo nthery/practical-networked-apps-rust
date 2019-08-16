@@ -15,6 +15,9 @@ pub trait KvsEngine: Send + Sync + 'static {
     /// The spec calls for deriving this trait from Clone but this prevents from using trait
     /// objects (e.g. open_engine(...) -> Box<dyn KvsEngine).  So we add a layer of indirection: we
     /// implement Clone for Box<dyn KvsEngine> which calls this function.
+    ///
+    /// TODO: Now that we manage engine trait objects with Arc pointers we shouldn't need
+    /// this anymore.
     fn boxed_clone(&self) -> Box<dyn KvsEngine>;
 
     fn set(&self, key: String, value: String) -> Result<()>;
