@@ -2,20 +2,19 @@ use crate::{thread_pool::*, wire, KvsEngine, Result};
 use log::{debug, error};
 use std::io::{prelude::*, BufReader};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
 
 // TODO: Make it f(# core)?
 const NTHREADS: u32 = 8;
 
 /// TCP/IP server handling requests from KvsClient instances.
-pub struct KvsServer {
+pub struct KvsServer<E: KvsEngine> {
     listener: TcpListener,
-    engine: Arc<dyn KvsEngine>,
+    engine: E,
 }
 
-impl KvsServer {
+impl<E: KvsEngine> KvsServer<E> {
     /// Creates a new server listening for requests on `addr` and delegating requests to `engine`.
-    pub fn new(engine: Arc<dyn KvsEngine>, addr: SocketAddr) -> Result<KvsServer> {
+    pub fn new(engine: E, addr: SocketAddr) -> Result<KvsServer<E>> {
         Ok(KvsServer {
             listener: TcpListener::bind(addr)?,
             engine,
@@ -30,7 +29,7 @@ impl KvsServer {
             let engine = self.engine.clone();
             let stream = stream?;
             pool.spawn(move || {
-                match Self::handle_request(engine.as_ref(), stream) {
+                match Self::handle_request(engine, stream) {
                     Ok(_) => debug!("handled request successfully"),
                     Err(err) => {
                         // Errors that can not be forwarded back to clients are logged instead.
@@ -42,7 +41,7 @@ impl KvsServer {
         Ok(())
     }
 
-    fn handle_request(engine: &dyn KvsEngine, mut stream: TcpStream) -> Result<()> {
+    fn handle_request(engine: E, mut stream: TcpStream) -> Result<()> {
         let mut rd = BufReader::new(&stream);
         let mut line = String::new();
         rd.read_line(&mut line)?;

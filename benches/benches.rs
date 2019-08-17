@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use kvs::{KvStore, KvsEngine};
+use kvs::{KvStore, KvsEngine, SledKvsEngine};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use tempfile::TempDir;
 
