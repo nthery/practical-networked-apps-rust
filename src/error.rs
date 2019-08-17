@@ -53,7 +53,7 @@ impl fmt::Display for KvError {
             KvError::Serde(_) => write!(f, "Serialization error"),
             KvError::Sled(_) => write!(f, "Sled error"),
             KvError::KeyNotFound(ref key) => write!(f, "Key not found: {}", key),
-            KvError::BadEngine => write!(f, "Selected engine does not support stored data"),
+            KvError::BadEngine => write!(f, "Selected engine does not support data stored on disk"),
             KvError::Server(ref msg) => write!(f, "Server error: {}", msg),
             KvError::UnknownEngine => write!(f, "Unknown engine"),
             KvError::Other(ref err) => write!(f, "{}", err),

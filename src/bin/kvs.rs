@@ -1,5 +1,5 @@
 use clap::{App, AppSettings, Arg, SubCommand};
-use kvs::{self, KvError, Result};
+use kvs::{self, EngineKind, KvError, KvStore, KvsEngine, Result, SledKvsEngine};
 use std::error::Error;
 
 fn try_main() -> Result<()> {
@@ -24,11 +24,16 @@ fn try_main() -> Result<()> {
         .subcommand(SubCommand::with_name("rm").arg(Arg::with_name("key").required(true).index(1)))
         .get_matches();
 
-    let engine = matches.value_of("engine");
-    let store = kvs::open_engine(engine)?;
+    let (engine_kind, dir) = kvs::prepare_engine_creation(matches.value_of("engine"))?;
+    match engine_kind {
+        EngineKind::Kvs => handle_subcommand(matches, KvStore::open(dir)?),
+        EngineKind::Sled => handle_subcommand(matches, SledKvsEngine::open(dir)?),
+    }
+}
 
+fn handle_subcommand(matches: clap::ArgMatches, engine: impl KvsEngine) -> Result<()> {
     match matches.subcommand() {
-        ("get", Some(smatches)) => match store.get(smatches.value_of("key").unwrap().to_owned()) {
+        ("get", Some(smatches)) => match engine.get(smatches.value_of("key").unwrap().to_owned()) {
             Ok(Some(val)) => {
                 println!("{}", val);
                 Ok(())
@@ -39,11 +44,11 @@ fn try_main() -> Result<()> {
             }
             Err(err) => Err(err),
         },
-        ("set", Some(smatches)) => store.set(
+        ("set", Some(smatches)) => engine.set(
             smatches.value_of("key").unwrap().to_owned(),
             smatches.value_of("value").unwrap().to_owned(),
         ),
-        ("rm", Some(smatches)) => store.remove(smatches.value_of("key").unwrap().to_owned()),
+        ("rm", Some(smatches)) => engine.remove(smatches.value_of("key").unwrap().to_owned()),
         _ => panic!("clap should have detected missing subcommand"),
     }
 }

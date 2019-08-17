@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use kvs::{self, KvsServer, Result};
+use kvs::{self, EngineKind, KvStore, KvsEngine, KvsServer, Result, SledKvsEngine};
 use log::info;
 
 use std::error::Error;
@@ -32,14 +32,18 @@ fn try_main() -> Result<()> {
         .unwrap_or("127.0.0.1:4000")
         .parse()?;
 
-    let engine = matches.value_of("engine");
+    let engine_name = matches.value_of("engine");
 
     info!("version: {}", env!("CARGO_PKG_VERSION"));
-    info!("engine: {}", engine.unwrap_or("default"));
+    info!("engine: {}", engine_name.unwrap_or("default"));
     info!("address: {}", addr);
 
-    let store = kvs::open_engine(engine)?;
-    KvsServer::new(store, addr)?.run()
+    let (engine_kind, dir) = kvs::prepare_engine_creation(engine_name)?;
+    let engine: std::sync::Arc<dyn KvsEngine> = match engine_kind {
+        EngineKind::Kvs => std::sync::Arc::new(KvStore::open(dir)?),
+        EngineKind::Sled => std::sync::Arc::new(SledKvsEngine::open(dir)?),
+    };
+    KvsServer::new(engine, addr)?.run()
 }
 
 fn main() {
