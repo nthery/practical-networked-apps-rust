@@ -41,15 +41,13 @@ struct Header<'a> {
 
 const MAX_DEAD_ENTRIES: i32 = 64;
 
-impl KvStore {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
+impl KvsEngine for KvStore {
+    fn open<P: AsRef<Path>>(path: P) -> Result<KvStore> {
         RawStore::open(path).map(|raw| KvStore {
             raw: Arc::new(Mutex::new(raw)),
         })
     }
-}
 
-impl KvsEngine for KvStore {
     fn set(&self, key: String, value: String) -> Result<()> {
         self.raw.lock()?.set(key, value)
     }

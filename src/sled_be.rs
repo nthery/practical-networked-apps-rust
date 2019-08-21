@@ -9,13 +9,11 @@ use std::path::Path;
 #[derive(Clone)]
 pub struct SledKvsEngine(Db);
 
-impl SledKvsEngine {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<SledKvsEngine> {
+impl KvsEngine for SledKvsEngine {
+    fn open<P: AsRef<Path>>(path: P) -> Result<SledKvsEngine> {
         Ok(SledKvsEngine(Db::start_default(path.as_ref())?))
     }
-}
 
-impl KvsEngine for SledKvsEngine {
     fn set(&self, key: String, value: String) -> Result<()> {
         self.0.set(key.as_bytes(), value.as_bytes())?;
         self.0.flush()?;

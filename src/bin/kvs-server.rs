@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use kvs::{self, EngineKind, KvStore, KvsServer, Result, SledKvsEngine};
+use kvs::{self, EngineKind, KvStore, KvsEngine, KvsServer, Result, SledKvsEngine};
 use log::info;
 
 use std::error::Error;
