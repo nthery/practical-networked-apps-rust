@@ -13,6 +13,7 @@ tempfile = "3.0.7"
 log = "0.4.7"
 stderrlog = "0.4.1"
 sled = "0.24"
+num_cpus = "1.10.1"
 
 [dev-dependencies]
 assert_cmd = "0.11"

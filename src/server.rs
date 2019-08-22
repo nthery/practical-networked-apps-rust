@@ -3,9 +3,6 @@ use log::{debug, error};
 use std::io::{prelude::*, BufReader};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 
-// TODO: Make it f(# core)?
-const NTHREADS: u32 = 8;
-
 /// TCP/IP server handling requests from KvsClient instances.
 pub struct KvsServer<E: KvsEngine> {
     listener: TcpListener,
@@ -23,7 +20,7 @@ impl<E: KvsEngine> KvsServer<E> {
 
     /// Serves requests forever or until a fatal error occurs.
     pub fn run(&mut self) -> Result<()> {
-        let pool = SharedQueueThreadPool::new(NTHREADS)?;
+        let pool = SharedQueueThreadPool::new(num_cpus::get() as u32)?;
 
         for stream in self.listener.incoming() {
             let engine = self.engine.clone();
