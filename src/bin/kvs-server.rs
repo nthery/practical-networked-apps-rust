@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use kvs::{self, EngineKind, KvStore, KvsEngine, KvsServer, Result, SledKvsEngine};
+use kvs::{self, thread_pool::*, EngineKind, KvStore, KvsEngine, KvsServer, Result, SledKvsEngine};
 use log::info;
 
 use std::error::Error;
@@ -38,10 +38,12 @@ fn try_main() -> Result<()> {
     info!("engine: {}", engine_name.unwrap_or("default"));
     info!("address: {}", addr);
 
+    let pool = SharedQueueThreadPool::new(num_cpus::get() as u32)?;
+
     let (engine_kind, dir) = kvs::prepare_engine_creation(engine_name)?;
     match engine_kind {
-        EngineKind::Kvs => KvsServer::new(KvStore::open(dir)?, addr)?.run(),
-        EngineKind::Sled => KvsServer::new(SledKvsEngine::open(dir)?, addr)?.run(),
+        EngineKind::Kvs => KvsServer::new(KvStore::open(dir)?, pool, addr)?.run(),
+        EngineKind::Sled => KvsServer::new(SledKvsEngine::open(dir)?, pool, addr)?.run(),
     }
 }
 

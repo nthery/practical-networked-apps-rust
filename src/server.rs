@@ -4,28 +4,28 @@ use std::io::{prelude::*, BufReader};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 
 /// TCP/IP server handling requests from KvsClient instances.
-pub struct KvsServer<E: KvsEngine> {
+pub struct KvsServer<E: KvsEngine, P: ThreadPool> {
     listener: TcpListener,
     engine: E,
+    thread_pool: P,
 }
 
-impl<E: KvsEngine> KvsServer<E> {
+impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
     /// Creates a new server listening for requests on `addr` and delegating requests to `engine`.
-    pub fn new(engine: E, addr: SocketAddr) -> Result<KvsServer<E>> {
+    pub fn new(engine: E, pool: P, addr: SocketAddr) -> Result<KvsServer<E, P>> {
         Ok(KvsServer {
             listener: TcpListener::bind(addr)?,
             engine,
+            thread_pool: pool,
         })
     }
 
     /// Serves requests forever or until a fatal error occurs.
     pub fn run(&mut self) -> Result<()> {
-        let pool = SharedQueueThreadPool::new(num_cpus::get() as u32)?;
-
         for stream in self.listener.incoming() {
             let engine = self.engine.clone();
             let stream = stream?;
-            pool.spawn(move || {
+            self.thread_pool.spawn(move || {
                 match Self::handle_request(engine, stream) {
                     Ok(_) => debug!("handled request successfully"),
                     Err(err) => {
