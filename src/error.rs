@@ -46,6 +46,12 @@ impl<T> From<std::sync::PoisonError<T>> for KvError {
     }
 }
 
+impl From<rayon::ThreadPoolBuildError> for KvError {
+    fn from(err: rayon::ThreadPoolBuildError) -> KvError {
+        KvError::Other(format!("Error while creating rayon thread pool: {}", err).to_owned())
+    }
+}
+
 impl fmt::Display for KvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
