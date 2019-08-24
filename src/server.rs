@@ -22,11 +22,23 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
 
     /// Serves requests forever or until a fatal error occurs.
     pub fn run(&mut self) -> Result<()> {
+        // Recycle buffer across iterations.
+        let mut line = String::new();
+
         for stream in self.listener.incoming() {
-            let engine = self.engine.clone();
             let stream = stream?;
+
+            // Decode request
+            let mut rd = BufReader::new(&stream);
+            line.clear();
+            rd.read_line(&mut line)?;
+            let cmd: wire::Request = serde_json::from_str(&line)?;
+            debug!("handling request {:?}", cmd);
+
+            // Offload request processing to worker thread.
+            let engine = self.engine.clone();
             self.thread_pool.spawn(move || {
-                match Self::handle_request(engine, stream) {
+                match Self::handle_request(engine, cmd, stream) {
                     Ok(_) => debug!("handled request successfully"),
                     Err(err) => {
                         // Errors that can not be forwarded back to clients are logged instead.
@@ -38,12 +50,14 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
         Ok(())
     }
 
-    fn handle_request(engine: E, mut stream: TcpStream) -> Result<()> {
-        let mut rd = BufReader::new(&stream);
-        let mut line = String::new();
-        rd.read_line(&mut line)?;
-        let cmd: wire::Request = serde_json::from_str(&line)?;
-        debug!("handling request {:?}", cmd);
+    // fn decode_request(stream: &mut TcpStream) -> Result<wire::Request> {
+    //     let mut rd = BufReader::new(stream);
+    //     let mut line = String::new();
+    //     rd.read_line(&mut line)?;
+    //     serde_json::from_str(&line)
+    // }
+
+    fn handle_request(engine: E, cmd: wire::Request, mut stream: TcpStream) -> Result<()> {
         match cmd {
             wire::Request::Get(key) => {
                 let reply = wire::Reply(engine.get(key).map_err(|err| err.to_string()));
