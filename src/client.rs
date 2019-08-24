@@ -41,4 +41,15 @@ impl KvsClient {
         debug!("received {:?}", reply);
         reply.0.map(|_| ()).map_err(KvError::Server)
     }
+
+    /// Requests server to stop.
+    ///
+    /// When this function returns, the server has stopped all processing.
+    pub fn shutdown(&mut self) -> Result<()> {
+        let req = serde_json::to_string(&wire::Request::Shutdown)?;
+        writeln!(self.stream, "{}", req)?;
+        let reply = serde_json::from_reader::<_, wire::Reply>(&mut self.stream)?;
+        debug!("received {:?}", reply);
+        reply.0.map(|_| ()).map_err(KvError::Server)
+    }
 }

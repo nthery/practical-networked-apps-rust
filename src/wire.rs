@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
 // TODO: Use &str instead of String
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
 pub enum Request {
     Get(String),
     Set(String, String),
     Rm(String),
+    Shutdown,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

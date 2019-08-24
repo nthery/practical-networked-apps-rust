@@ -22,6 +22,7 @@ mod server;
 pub use server::KvsServer;
 
 pub mod thread_pool;
+pub use thread_pool::{NaiveThreadPool, RayonThreadPool, SharedQueueThreadPool, ThreadPool};
 
 /// All supported backends.
 #[derive(PartialEq)]

@@ -7,7 +7,7 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 pub struct KvsServer<E: KvsEngine, P: ThreadPool> {
     listener: TcpListener,
     engine: E,
-    thread_pool: P,
+    thread_pool: Option<P>,
 }
 
 impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
@@ -16,17 +16,17 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
         Ok(KvsServer {
             listener: TcpListener::bind(addr)?,
             engine,
-            thread_pool: pool,
+            thread_pool: Some(pool),
         })
     }
 
-    /// Serves requests forever or until a fatal error occurs.
+    /// Serves requests until shutdown received or a fatal error occurs.
     pub fn run(&mut self) -> Result<()> {
         // Recycle buffer across iterations.
         let mut line = String::new();
 
         for stream in self.listener.incoming() {
-            let stream = stream?;
+            let mut stream = stream?;
 
             // Decode request
             let mut rd = BufReader::new(&stream);
@@ -35,9 +35,18 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
             let cmd: wire::Request = serde_json::from_str(&line)?;
             debug!("handling request {:?}", cmd);
 
+            if cmd == wire::Request::Shutdown {
+                // Drop the pool to block until all worker threads complete.
+                self.thread_pool.take();
+
+                send_reply(&mut stream, wire::Reply(Ok(None)))
+                    .expect("error when replying to shutdown request");
+                break;
+            }
+
             // Offload request processing to worker thread.
             let engine = self.engine.clone();
-            self.thread_pool.spawn(move || {
+            self.thread_pool.as_ref().unwrap().spawn(move || {
                 match Self::handle_request(engine, cmd, stream) {
                     Ok(_) => debug!("handled request successfully"),
                     Err(err) => {
@@ -49,13 +58,6 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
         }
         Ok(())
     }
-
-    // fn decode_request(stream: &mut TcpStream) -> Result<wire::Request> {
-    //     let mut rd = BufReader::new(stream);
-    //     let mut line = String::new();
-    //     rd.read_line(&mut line)?;
-    //     serde_json::from_str(&line)
-    // }
 
     fn handle_request(engine: E, cmd: wire::Request, mut stream: TcpStream) -> Result<()> {
         match cmd {
@@ -81,6 +83,7 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
                 );
                 send_reply(&mut stream, reply)?;
             }
+            wire::Request::Shutdown => panic!("shutdown request not handled in server thread"),
         };
         Ok(())
     }

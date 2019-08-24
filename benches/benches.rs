@@ -1,6 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use kvs::{KvStore, KvsEngine, SledKvsEngine};
+use kvs::{
+    KvStore, KvsClient, KvsEngine, KvsServer, SharedQueueThreadPool, SledKvsEngine, ThreadPool,
+};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
+use std::net::SocketAddr;
 use tempfile::TempDir;
 
 // TODO: The spec requires to write and read 100 times but this takes several minutes with the sled engine.
@@ -89,5 +92,24 @@ fn sled_read(c: &mut Criterion) {
     generic_read::<SledKvsEngine>(c, "sled_read");
 }
 
-criterion_group!(benches, kvs_write, kvs_read, sled_write, sled_read);
+fn server_kvs_shared_write(c: &mut Criterion) {
+    let tmpdir = TempDir::new().unwrap();
+    let engine = KvStore::open(&tmpdir).unwrap();
+    let pool = SharedQueueThreadPool::new(1).unwrap();
+    let addr = "127.0.0.1:4000".parse::<SocketAddr>().unwrap();
+    let mut server = KvsServer::new(engine, pool, addr).unwrap();
+    let mut client = KvsClient::new(addr).unwrap();
+    let server_thread = std::thread::spawn(move || server.run());
+    client.shutdown().unwrap();
+    assert!(server_thread.join().is_ok());
+}
+
+criterion_group!(
+    benches,
+    kvs_write,
+    kvs_read,
+    sled_write,
+    sled_read,
+    server_kvs_shared_write
+);
 criterion_main!(benches);
