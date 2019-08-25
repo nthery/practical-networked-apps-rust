@@ -33,7 +33,7 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
             line.clear();
             rd.read_line(&mut line)?;
             let cmd: wire::Request = serde_json::from_str(&line)?;
-            debug!("handling request {:?}", cmd);
+            debug!("S: handling {:?}", cmd);
 
             if cmd == wire::Request::Shutdown {
                 // Drop the pool to block until all worker threads complete.
@@ -48,7 +48,7 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
             let engine = self.engine.clone();
             self.thread_pool.as_ref().unwrap().spawn(move || {
                 match Self::handle_request(engine, cmd, stream) {
-                    Ok(_) => debug!("handled request successfully"),
+                    Ok(_) => debug!("S: OK"),
                     Err(err) => {
                         // Errors that can not be forwarded back to clients are logged instead.
                         error!("error while handling request: {}", err)
@@ -56,6 +56,8 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
                 }
             })
         }
+
+        debug!("S: exiting");
         Ok(())
     }
 
@@ -90,7 +92,7 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
 }
 
 fn send_reply(wr: &mut impl Write, r: wire::Reply) -> Result<()> {
-    debug!("replying {:?}", r);
+    debug!("S: replying {:?}", r);
     let ser = serde_json::to_string(&r)?;
     writeln!(wr, "{}", ser)?;
     Ok(())
